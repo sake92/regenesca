@@ -35,3 +35,6 @@ The merge looks roughly as follows:
 - comments are not preserved
 - it ignores expressions when merging
 
+## Adopters
+
+- [Squery generator](https://github.com/sake92/squery) from version 0.6.0
