@@ -18,8 +18,10 @@ See the [example](/example) folder
 
 ## How it works?
 
+Regenesca is based on [Scalameta](https://scalameta.org/).
+
 The principle is simple.  
-You tell it what source code should be contained in a file, and then:
+You tell it what *source code* should be contained in a *particular file*, and then:
 - if file doesn't exist -> write that code into it
 - if file exists -> merge the existing scala code in a *mostly ad-hoc* way to achieve 99% of what you wanted with your code generator
 
