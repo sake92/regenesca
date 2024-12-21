@@ -21,12 +21,11 @@ object regenesca extends ScalaModule with CiReleaseModule {
     )
   )
 
-  def scalaVersion = "2.13.14"
+  def scalaVersion = "2.13.15"
 
   def ivyDeps = Agg(
     ivy"org.scalameta::scalameta:4.9.9",
-    ivy"org.scala-lang.modules::scala-collection-contrib:0.3.0",
-    ivy"com.lihaoyi::pprint:0.9.0"
+    ivy"org.scala-lang.modules::scala-collection-contrib:0.3.0"
   )
 
   object test extends ScalaTests with TestModule.Munit {
@@ -37,6 +36,6 @@ object regenesca extends ScalaModule with CiReleaseModule {
 }
 
 object example extends ScalaModule {
-  def scalaVersion = "2.13.14"
+  def scalaVersion = "2.13.15"
   def moduleDeps = Seq(regenesca)
 }

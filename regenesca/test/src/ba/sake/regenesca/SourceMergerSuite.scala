@@ -261,4 +261,6 @@ enum Color:
     val result = SourceMerger().merge(first, second)
     assertEquals(result.structure, excepted.structure)
   }
+
+  // TODO test givens
 }
