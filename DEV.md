@@ -26,8 +26,8 @@ git push --atomic origin main --tags
 
 # prepare for NEXT version
 # bump regenescaVersion to x.y.z-SNAPSHOT
-$VERSION="x.y.z-SNAPSHOT"
+$VERSION="0.4.2-SNAPSHOT"
 git commit -am"Bump version to $VERSION"
-
+git push
 
 ```
