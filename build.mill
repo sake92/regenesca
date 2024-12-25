@@ -1,13 +1,17 @@
-import $ivy.`io.chris-kipp::mill-ci-release::0.1.10`
+package build
 
+import $ivy.`com.lihaoyi::mill-contrib-sonatypecentral:`
 import mill._
 import mill.scalalib._
 import mill.scalalib.publish._
-import io.kipp.mill.ci.release.CiReleaseModule
+import mill.contrib.sonatypecentral.SonatypeCentralPublishModule
 
-object regenesca extends ScalaModule with CiReleaseModule {
+val regenescaVersion = "0.4.0-SNAPSHOT"
+
+object regenesca extends ScalaModule with SonatypeCentralPublishModule {
 
   def artifactName = "regenesca"
+  def publishVersion = regenescaVersion
 
   def pomSettings = PomSettings(
     organization = "ba.sake",
@@ -24,8 +28,7 @@ object regenesca extends ScalaModule with CiReleaseModule {
   def scalaVersion = "2.13.15"
 
   def ivyDeps = Agg(
-    ivy"org.scalameta::scalameta:4.9.9",
-    ivy"org.scala-lang.modules::scala-collection-contrib:0.3.0"
+    ivy"org.scalameta::scalameta:4.9.9"
   )
 
   object test extends ScalaTests with TestModule.Munit {

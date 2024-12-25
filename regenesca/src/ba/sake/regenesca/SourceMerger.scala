@@ -1,329 +1,210 @@
 package ba.sake.regenesca
 
-import scala.collection.decorators._
 import scala.meta._
 import scala.meta.contrib._
 
-class SourceMerger(mergeDefBody: Boolean) {
+class SourceMerger(mergeDefBodies: Boolean) {
 
-  def merge(original: Source, overwrite: Source): Source = {
-    val overwittenStats = mergeStats(original.stats, overwrite.stats)
-    original.copy(stats = overwittenStats)
+  def merge(originalSource: Source, overwriteSource: Source): Source = {
+    val overwrittenStats =
+      overwriteStats(originalSource.stats, overwriteSource.stats)
+    originalSource.copy(stats = overwrittenStats)
   }
 
-  // merges packages, classes, methods by name
-  // overwriteStats + originalStats_that_are_not_overwritten
-  private def mergeStats(
+  private def overwriteStats(
       originalStats: List[Stat],
-      overwriteStats: List[Stat]
+      generatedStats: List[Stat]
   ): List[Stat] = {
-    val originalPackages = originalStats.collect { case p: Pkg => p }
-    val overwritePackages = overwriteStats.collect { case p: Pkg => p }
-    val mergedPackages = mergePackages(originalPackages, overwritePackages)
-
-    val originalImports = originalStats.collect { case i: Import => i }
-    val overwriteImports = overwriteStats.collect { case i: Import => i }
-    val mergedImports = mergeImports(originalImports, overwriteImports)
-
-    // this kinda works for top-level stats, not so sure about defs etc
-    val originalValDefs = originalStats.collect { case v: Defn.Val => v }
-    val overwriteValDefs = overwriteStats.collect { case v: Defn.Val => v }
-    val mergedValDefs = mergeValDefs(originalValDefs, overwriteValDefs)
-
-    val originalVarDefs = originalStats.collect { case v: Defn.Var => v }
-    val overwriteVarDefs = overwriteStats.collect { case v: Defn.Var => v }
-    val mergedVarDefs = mergeVarDefs(originalVarDefs, overwriteVarDefs)
-
-    val originalMethodDefs = originalStats.collect { case d: Defn.Def => d }
-    val overwriteMethodDefs = overwriteStats.collect { case d: Defn.Def => d }
-    val mergedMethodDefs =
-      mergeMethodDefs(originalMethodDefs, overwriteMethodDefs)
-
-    val originalEnums = originalStats.collect { case e: Defn.Enum => e }
-    val overwriteEnums = overwriteStats.collect { case e: Defn.Enum => e }
-    val mergedEnums = mergeEnums(originalEnums, overwriteEnums)
-
-    val originalClasses = originalStats.collect { case c: Defn.Class => c }
-    val overwriteClasses = overwriteStats.collect { case c: Defn.Class => c }
-    val mergedClasses = mergeClasses(originalClasses, overwriteClasses)
-
-    val originalTraits = originalStats.collect { case c: Defn.Trait => c }
-    val overwriteTraits = overwriteStats.collect { case c: Defn.Trait => c }
-    val mergedTraits = mergeTraits(originalTraits, overwriteTraits)
-
-    val originalObjects = originalStats.collect { case o: Defn.Object => o }
-    val overwriteObjects = overwriteStats.collect { case o: Defn.Object => o }
-    val mergedObjects = mergeObjects(originalObjects, overwriteObjects)
-
-    val originalTypes = originalStats.collect { case t: Defn.Type => t }
-    val overwriteTypes = overwriteStats.collect { case t: Defn.Type => t }
-    val mergedTypes = mergeTypes(originalTypes, overwriteTypes)
-
-    val originalGivens = originalStats.collect { case g: Defn.Given => g }
-    val overwriteGivens = overwriteStats.collect { case g: Defn.Given => g }
-    val mergedGivens = mergeGivens(originalGivens, overwriteGivens)
-
-    val originalGivenAliases = originalStats.collect { case g: Defn.GivenAlias => g }
-    val overwriteGivenAliases = overwriteStats.collect { case g: Defn.GivenAlias => g }
-    val mergedGivenAliases = mergeGivenAliases(originalGivenAliases, overwriteGivenAliases)
-
-
-    val originalTerms = originalStats.collect { case t: Term => t }
-    //val overwriteTerms = overwriteStats.collect { case t: Term => t }
-    // val mergedTerms = mergeTerms(originalTerms, overwriteTerms)
-    val mergedTerms = originalTerms
-
-    mergedPackages ++ mergedImports ++
-      mergedValDefs ++ mergedVarDefs ++
-      mergedMethodDefs ++
-      mergedEnums ++ mergedClasses ++
-      mergedTraits ++ 
-      mergedObjects ++
-      mergedTypes ++
-      mergedGivens ++
-      mergedGivenAliases ++
-      mergedTerms
-  }
-
-  private def mergePackages(
-      originalPackages: List[Pkg],
-      overwritePackages: List[Pkg]
-  ): List[Pkg] = {
-    val originalPackagesMap =
-      originalPackages.map(p => p.name.value -> p).toOrderedMap
-    val overwritePackagesMap =
-      overwritePackages.map(p => p.name.value -> p).toOrderedMap
-    val joined = originalPackagesMap.fullOuterJoin(overwritePackagesMap)
-    val mergedPackages = joined.values.collect {
-      case (Some(p1), Some(p2)) =>
-        val mergedStats = mergeStats(p1.stats, p2.stats)
-        p2.copy(stats = mergedStats)
-      case (Some(p1), None) => p1
-      case (None, Some(p2)) => p2
-    }
-    mergedPackages.toList
-  }
-
-  private def mergeImports(
-      originalImports: List[Import],
-      overwriteImports: List[Import]
-  ): List[Import] = {
-    val newImports = overwriteImports.filterNot { i =>
-      originalImports.exists(_.isEqual(i))
-    }
-    (originalImports ++ newImports)
-  }
-
-  private def mergeEnums(
-      originalEnums: List[Defn.Enum],
-      overwriteEnums: List[Defn.Enum]
-  ): List[Defn.Enum] = {
-    val originalEnumsMap =
-      originalEnums.map(c => c.name.value -> c).toOrderedMap
-    val overwriteEnumsMap =
-      overwriteEnums.map(c => c.name.value -> c).toOrderedMap
-    val joined = originalEnumsMap.fullOuterJoin(overwriteEnumsMap)
-    val mergedEnums = joined.values.collect {
-      case (Some(_), Some(e2)) => e2
-      case (Some(e1), None)    => e1
-      case (None, Some(e2))    => e2
-    }
-    mergedEnums.toList
-  }
-
-  private def mergeClasses(
-      originalClasses: List[Defn.Class],
-      overwriteClasses: List[Defn.Class]
-  ): List[Defn.Class] = {
-    val originalClassesMap =
-      originalClasses.map(c => c.name.value -> c).toOrderedMap
-    val overwriteClassesMap =
-      overwriteClasses.map(c => c.name.value -> c).toOrderedMap
-    val joined = originalClassesMap.fullOuterJoin(overwriteClassesMap)
-    val mergedClasses = joined.values.collect {
-      case (Some(c1), Some(c2)) =>
-        val mergedTemplStats = mergeStats(c1.templ.stats, c2.templ.stats)
-        val mergedTempl = c2.templ.copy(stats = mergedTemplStats)
-        c2.copy(templ = mergedTempl)
-      case (Some(c1), None) => c1
-      case (None, Some(c2)) => c2
-    }
-    mergedClasses.toList
-  }
-
-  private def mergeTraits(
-      originalClasses: List[Defn.Trait],
-      overwriteClasses: List[Defn.Trait]
-  ): List[Defn.Trait] = {
-    val originalClassesMap =
-      originalClasses.map(c => c.name.value -> c).toOrderedMap
-    val overwriteClassesMap =
-      overwriteClasses.map(c => c.name.value -> c).toOrderedMap
-    val joined = originalClassesMap.fullOuterJoin(overwriteClassesMap)
-    val mergedClasses = joined.values.collect {
-      case (Some(c1), Some(c2)) =>
-        val mergedTemplStats = mergeStats(c1.templ.stats, c2.templ.stats)
-        val mergedTempl = c2.templ.copy(stats = mergedTemplStats)
-        c2.copy(templ = mergedTempl)
-      case (Some(c1), None) => c1
-      case (None, Some(c2)) => c2
-    }
-    mergedClasses.toList
-  }
-
-  private def mergeObjects(
-      originalObjects: List[Defn.Object],
-      overwriteObjects: List[Defn.Object]
-  ): List[Defn.Object] = {
-    val originalObjectsMap =
-      originalObjects.map(o => o.name.value -> o).toOrderedMap
-    val overwriteObjectsMap =
-      overwriteObjects.map(o => o.name.value -> o).toOrderedMap
-    val joined = originalObjectsMap.fullOuterJoin(overwriteObjectsMap)
-    val mergedObjects = joined.values.collect {
-      case (Some(o1), Some(o2)) =>
-        val mergedTemplStats = mergeStats(o1.templ.stats, o2.templ.stats)
-        val mergedTempl = o2.templ.copy(stats = mergedTemplStats)
-        o2.copy(templ = mergedTempl)
-      case (Some(o1), None) => o1
-      case (None, Some(o2)) => o2
-    }
-    mergedObjects.toList
-  }
-
-  private def mergeTypes(
-      originalTypes: List[Defn.Type],
-      overwriteTypes: List[Defn.Type]
-  ): List[Defn.Type] = {
-    val originalTypesMap =
-      originalTypes.map(t => t.name.value -> t).toOrderedMap
-    val overwriteTypesMap =
-      overwriteTypes.map(t => t.name.value -> t).toOrderedMap
-    val joined = originalTypesMap.fullOuterJoin(overwriteTypesMap)
-    val mergedTypes = joined.values.collect {
-      case (Some(t1), Some(t2)) => t2
-      case (Some(t1), None)     => t1
-      case (None, Some(t2))     => t2
-    }
-    mergedTypes.toList
-  }
-
-  private def mergeGivens(
-      originalGivens: List[Defn.Given],
-      overwriteGivens: List[Defn.Given]
-  ): List[Defn.Given] = {
-    val originalGivensMap =
-      originalGivens.map(t => t.name.value -> t).toOrderedMap
-    val overwriteGivensMap =
-      overwriteGivens.map(t => t.name.value -> t).toOrderedMap
-    val joined = originalGivensMap.fullOuterJoin(overwriteGivensMap)
-    joined.values.collect {
-      case (Some(g1), Some(g2)) => g2
-      case (Some(g1), None)     => g1
-      case (None, Some(g2))     => g2
-    }
-    .toList
-  }
-
-  private def mergeGivenAliases(
-      originalGivens: List[Defn.GivenAlias],
-      overwriteGivens: List[Defn.GivenAlias]
-  ): List[Defn.GivenAlias] = {
-    val originalGivensMap =
-      originalGivens.map(t => t.name.value -> t).toOrderedMap
-    val overwriteGivensMap =
-      overwriteGivens.map(t => t.name.value -> t).toOrderedMap
-    val joined = originalGivensMap.fullOuterJoin(overwriteGivensMap)
-    joined.values.collect {
-      case (Some(g1), Some(g2)) => g2
-      case (Some(g1), None)     => g1
-      case (None, Some(g2))     => g2
-    }
-    .toList
-  }
-
-  
-
-  private def mergeValDefs(
-      originalValDefs: List[Defn.Val],
-      overwriteValDefs: List[Defn.Val]
-  ): List[Defn.Val] = {
-    val originalValDefsMap =
-      originalValDefs.flatMap { v =>
-        v.pats.headOption.collect { case p: Pat.Var =>
-          p.name.value -> v
+    // dont consider new expressions at all!
+    val overwritingStats = generatedStats.filterNot(_.isInstanceOf[Term])
+    var usedOverwritingStats: Set[Stat] = Set.empty
+    val overwrittenOriginalStats = originalStats.map {
+      case p1: Pkg =>
+        val overwritingPkgsMap = overwritingStats.collect { case p2: Pkg =>
+          p2.name.value -> p2
+        }.toMap
+        overwritingPkgsMap.get(p1.name.value) match {
+          case Some(p2) =>
+            usedOverwritingStats += p2
+            val pkgStats = overwriteStats(p1.stats, p2.stats)
+            p1.copy(stats = pkgStats)
+          case None => p1
         }
-      }.toOrderedMap
-    val overwriteValDefsMap =
-      overwriteValDefs.flatMap { v =>
-        v.pats.headOption.collect { case p: Pat.Var =>
-          p.name.value -> v
+      case i1: Import =>
+        val overwritingImports = overwritingStats.collect { case i2: Import =>
+          i2
         }
-      }.toOrderedMap
-    val joined = originalValDefsMap.fullOuterJoin(overwriteValDefsMap)
-    val mergedVals = joined.values.collect {
-      // v2 wins here, no questions asked. For now
-      case (Some(_), Some(v2)) => v2
-      case (Some(v1), None)    => v1
-      case (None, Some(v2))    => v2
+        overwritingImports.find(_.isEqual(i1)) match {
+          case Some(i2) =>
+            usedOverwritingStats += i2
+            i1
+          case None => i1
+        }
+      case v1: Defn.Val =>
+        val overwritingValsMap = overwritingStats
+          .collect { case v2: Defn.Val => v2 }
+          .flatMap { v =>
+            v.pats.headOption.collect { case p: Pat.Var =>
+              p.name.value -> v
+            }
+          }
+          .toMap
+        val v1Name = v1.pats.headOption
+          .collect { case p: Pat.Var =>
+            p.name.value
+          }
+          .getOrElse("")
+        overwritingValsMap.get(v1Name) match {
+          case Some(v2) =>
+            usedOverwritingStats += v2
+            v2
+          case None => v1
+        }
+      case v1: Defn.Var =>
+        val overwritingValsMap = overwritingStats
+          .collect { case v2: Defn.Var => v2 }
+          .flatMap { v =>
+            v.pats.headOption.collect { case p: Pat.Var =>
+              p.name.value -> v
+            }
+          }
+          .toMap
+        val v1Name = v1.pats.headOption
+          .collect { case p: Pat.Var =>
+            p.name.value
+          }
+          .getOrElse("")
+        overwritingValsMap.get(v1Name) match {
+          case Some(v2) =>
+            usedOverwritingStats += v2
+            v2
+          case None => v1
+        }
+      case d1: Defn.Def =>
+        val overwritingDefsMap = overwritingStats.collect { case d2: Defn.Def =>
+          d2.name.value -> d2
+        }.toMap
+        overwritingDefsMap.get(d1.name.value) match {
+          case Some(d2) =>
+            usedOverwritingStats += d2
+            if (mergeDefBodies) {
+              val mergedBody = merge2Terms(d1.body, d2.body)
+              d2.copy(body = mergedBody)
+            } else {
+              d2
+            }
+          case None => d1
+        }
+      case e1: Defn.Enum =>
+        val overwritingEnumsMap = overwritingStats.collect {
+          case e2: Defn.Enum => e2.name.value -> e2
+        }.toMap
+        overwritingEnumsMap.get(e1.name.value) match {
+          case Some(e2) =>
+            usedOverwritingStats += e2
+            e2
+          case None => e1
+        }
+      case c1: Defn.Class =>
+        val overwritingClassesMap = overwritingStats.collect {
+          case c2: Defn.Class => c2.name.value -> c2
+        }.toMap
+        overwritingClassesMap.get(c1.name.value) match {
+          case Some(c2) =>
+            usedOverwritingStats += c2
+            val mergedTemplStats =
+              overwriteStats(c1.templ.stats, c2.templ.stats)
+            val mergedTempl = c1.templ.copy(stats = mergedTemplStats)
+            c1.copy(templ = mergedTempl)
+          case None => c1
+        }
+      case t1: Defn.Trait =>
+        val overwritingTraitsMap = overwritingStats.collect {
+          case t2: Defn.Trait => t2.name.value -> t2
+        }.toMap
+        overwritingTraitsMap.get(t1.name.value) match {
+          case Some(t2) =>
+            usedOverwritingStats += t2
+            val mergedTemplStats =
+              overwriteStats(t1.templ.stats, t2.templ.stats)
+            val mergedTempl = t1.templ.copy(stats = mergedTemplStats)
+            t1.copy(templ = mergedTempl)
+          case None => t1
+        }
+      case o1: Defn.Object =>
+        val overwritingObjectsMap = overwritingStats.collect {
+          case o2: Defn.Object => o2.name.value -> o2
+        }.toMap
+        overwritingObjectsMap.get(o1.name.value) match {
+          case Some(o2) =>
+            usedOverwritingStats += o2
+            val mergedTemplStats =
+              overwriteStats(o1.templ.stats, o2.templ.stats)
+            val mergedTempl = o1.templ.copy(stats = mergedTemplStats)
+            o1.copy(templ = mergedTempl)
+          case None => o1
+        }
+      case t1: Defn.Type =>
+        val overwritingTraitsMap = overwritingStats.collect {
+          case t2: Defn.Type => t2.name.value -> t2
+        }.toMap
+        overwritingTraitsMap.get(t1.name.value) match {
+          case Some(t2) =>
+            usedOverwritingStats += t2
+            t2
+          case None => t1
+        }
+      case g1: Defn.Given =>
+        val overwritingGivensMap = overwritingStats.collect {
+          case g2: Defn.Given => g2.name.value -> g2
+        }.toMap
+        overwritingGivensMap.get(g1.name.value) match {
+          case Some(g2) =>
+            usedOverwritingStats += g2
+            g2
+          case None => g1
+        }
+      case g1: Defn.GivenAlias =>
+        val overwritingGivensMap = overwritingStats.collect {
+          case g2: Defn.GivenAlias => g2.name.value -> g2
+        }.toMap
+        overwritingGivensMap.get(g1.name.value) match {
+          case Some(g2) =>
+            usedOverwritingStats += g2
+            g2
+          case None => g1
+        }
+      // leave other statements intact
+      case other => other
+    }.toBuffer
+    /* insert new stats at appropriate position */
+    val newStats = overwritingStats.filterNot(usedOverwritingStats)
+    newStats.foreach {
+      case v2: Import =>
+        val indexOfLastImport =
+          overwritingStats.lastIndexWhere(s => s.isInstanceOf[Import])
+        overwrittenOriginalStats.insert(indexOfLastImport + 1, v2)
+      case v2: Defn.Val =>
+        val indexOfLastValVar = overwritingStats.lastIndexWhere(s =>
+          s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var]
+        )
+        overwrittenOriginalStats.insert(indexOfLastValVar + 1, v2)
+      case v2: Defn.Var =>
+        val indexOfLastValVar = overwritingStats.lastIndexWhere(s =>
+          s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var]
+        )
+        overwrittenOriginalStats.insert(indexOfLastValVar + 1, v2)
+      case other =>
+        overwrittenOriginalStats.append(other)
     }
-    mergedVals.toList
-  }
-
-  private def mergeVarDefs(
-      originalVarDefs: List[Defn.Var],
-      overwriteVarDefs: List[Defn.Var]
-  ): List[Defn.Var] = {
-    val originalVarDefsMap =
-      originalVarDefs.flatMap { v =>
-        v.pats.headOption.collect { case p: Pat.Var =>
-          p.name.value -> v
-        }
-      }.toOrderedMap
-    val overwriteVarDefsMap =
-      overwriteVarDefs.flatMap { v =>
-        v.pats.headOption.collect { case p: Pat.Var =>
-          p.name.value -> v
-        }
-      }.toOrderedMap
-    val joined = originalVarDefsMap.fullOuterJoin(overwriteVarDefsMap)
-    val mergedVals = joined.values.collect {
-      // v2 wins here, no questions asked. For now
-      case (Some(_), Some(v2)) => v2
-      case (Some(v1), None)    => v1
-      case (None, Some(v2))    => v2
-    }
-    mergedVals.toList
-  }
-
-  private def mergeMethodDefs(
-      originalMethodDefs: List[Defn.Def],
-      overwriteMethodDefs: List[Defn.Def]
-  ): List[Defn.Def] = {
-    val originalMethodDefsMap =
-      originalMethodDefs.map(d => d.name.value -> d).toOrderedMap
-    val overwriteMethodDefsMap =
-      overwriteMethodDefs.map(d => d.name.value -> d).toOrderedMap
-    val joined = originalMethodDefsMap.fullOuterJoin(overwriteMethodDefsMap)
-    val mergedDefs = joined.values.collect {
-      case (Some(d1), Some(d2)) =>
-        if (mergeDefBody) {
-          val mergedBody = merge2Terms(d1.body, d2.body)
-          d2.copy(body = mergedBody)
-        } else {
-          d2 // dont bother, just overwrite as new
-        }
-      case (Some(d1), None) => d1
-      case (None, Some(d2)) => d2
-    }
-    mergedDefs.toList
+    overwrittenOriginalStats.toList
   }
 
   private def merge2Terms(originalTerm: Term, overwriteTerm: Term): Term =
     (originalTerm, overwriteTerm) match {
       case (t1: Term.Block, t2: Term.Block) =>
         // this will only merge val definitions, maybe overwrite them
-        val mergedStats = mergeStats(t1.stats, t2.stats)
+        val mergedStats = overwriteStats(t1.stats, t2.stats)
         t1.copy(stats = mergedStats)
       case (t1: Term.Apply, t2: Term.Apply) =>
         if ( // only handling one-arg functions...
@@ -346,37 +227,24 @@ class SourceMerger(mergeDefBody: Boolean) {
       case _ => originalTerm
     }
 
-    private def mergeCases(
-        originalCases: List[Case],
-        overwriteCases: List[Case]
-    ): List[Case] = {
-      val originalCasesMap =
-        originalCases.map(c => c.pat.structure -> c).toOrderedMap
-      val overwriteCasesMap =
-        overwriteCases.map(c => c.pat.structure -> c).toOrderedMap
-      val joined = originalCasesMap.fullOuterJoin(overwriteCasesMap)
-      val mergedDefs = joined.values.collect {
-        case (Some(c1), Some(c2)) =>
+  private def mergeCases(
+      originalCases: List[Case],
+      overwritingCases: List[Case]
+  ): List[Case] = {
+    var usedOverwritingCases: Set[Case] = Set.empty
+    val overwritingCasesMap = overwritingCases.map { c2 =>
+      c2.pat.structure -> c2
+    }.toMap
+    val overwrittenOriginalCases = originalCases.map { c1 =>
+      overwritingCasesMap.get(c1.pat.structure) match {
+        case Some(c2) =>
+          usedOverwritingCases += c2
           val mergedBody = merge2Terms(c1.body, c2.body)
-          c2.copy(body = mergedBody)
-        case (Some(c1), None) => c1
-        case (None, Some(c2)) => c2
+          c1.copy(body = mergedBody)
+        case None => c1
       }
-      mergedDefs.toList
     }
-
-  implicit class Seq2MapOps[K, V](seq: Seq[(K, V)]) {
-    def toOrderedMap: scala.collection.immutable.SeqMap[K, V] = {
-      val ordMap = scala.collection.mutable.LinkedHashMap.empty[K, V]
-      seq.foreach { case (k, v) =>
-        ordMap(k) = v
-      }
-      ordMap.to(scala.collection.immutable.SeqMap)
-    }
+    val newCases = overwritingCases.filterNot(usedOverwritingCases)
+    overwrittenOriginalCases ++ newCases
   }
-}
-
-object SourceMerger {
-  def apply(mergeDefBody: Boolean = true): SourceMerger =
-    new SourceMerger(mergeDefBody)
 }

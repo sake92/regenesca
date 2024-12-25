@@ -2,7 +2,6 @@ package ba.sake.regenesca
 
 import java.nio.file._
 import scala.meta._
-import ba.sake.regenesca.SourceMerger
 
 class RegenescaGenerator(merger: SourceMerger) {
 
@@ -11,25 +10,25 @@ class RegenescaGenerator(merger: SourceMerger) {
   )(implicit dialect: Dialect): Unit =
     generatedFileSources.foreach { generatedFileSource =>
       val filePath = generatedFileSource.file
-      val fileSource = readFileSourceOrEmpty(filePath)
-      val regeneratedFileSource =
-        merger.merge(fileSource, generatedFileSource.source)
-      Files.createDirectories(filePath.getParent())
-      // TODO scalafmt pretty??
-      Files.writeString(filePath, regeneratedFileSource.syntax)
+      Files.createDirectories(filePath.getParent)
+      if (Files.exists(filePath)) {
+        val fileSource = readFileSource(filePath)
+        val regeneratedFileSource =
+          merger.merge(fileSource, generatedFileSource.source)
+        Files.writeString(filePath, regeneratedFileSource.syntax)
+      } else {
+        Files.writeString(filePath, generatedFileSource.source.syntax)
+      }
     }
 
-  private def readFileSourceOrEmpty(
+  private def readFileSource(
       filePath: Path
-  )(implicit dialect: Dialect): Source =
-    if (Files.exists(filePath)) {
-      val bytes = Files.readAllBytes(filePath)
-      val text = new String(bytes, "UTF-8")
-      val input = Input.VirtualFile(filePath.toString, text)
-      input.parse[Source].get
-    } else {
-      Source(List.empty)
-    }
+  )(implicit dialect: Dialect): Source = {
+    val bytes = Files.readAllBytes(filePath)
+    val text = new String(bytes, "UTF-8")
+    val input = Input.VirtualFile(filePath.toString, text)
+    input.parse[Source].get
+  }
 }
 
 object RegenescaGenerator {

@@ -16,10 +16,18 @@
 ./mill  regenesca.publishLocal
 
 
-$VERSION="0.3.0"
+# RELEASE
+# bump regenescaVersion to x.y.z !!!
+$VERSION="x.y.z"
 git commit --allow-empty -am "Release $VERSION"
 git tag -a $VERSION -m "Release $VERSION"
-git push  --atomic origin main $VERSION
+git push --atomic origin main --tags
+
+
+# prepare for NEXT version
+# bump regenescaVersion to x.y.z-SNAPSHOT
+$VERSION="x.y.z-SNAPSHOT"
+git commit -am"Bump version to $VERSION"
 
 
 ```
