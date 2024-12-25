@@ -6,7 +6,7 @@ import mill.scalalib._
 import mill.scalalib.publish._
 import mill.contrib.sonatypecentral.SonatypeCentralPublishModule
 
-val regenescaVersion = "0.4.1-SNAPSHOT"
+val regenescaVersion = "0.4.1"
 
 object regenesca extends ScalaModule with SonatypeCentralPublishModule {
 

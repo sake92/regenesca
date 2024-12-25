@@ -18,7 +18,7 @@
 
 # RELEASE
 # bump regenescaVersion to x.y.z !!!
-$VERSION="x.y.z"
+$VERSION="0.4.1"
 git commit --allow-empty -am "Release $VERSION"
 git tag -a $VERSION -m "Release $VERSION"
 git push --atomic origin main --tags
