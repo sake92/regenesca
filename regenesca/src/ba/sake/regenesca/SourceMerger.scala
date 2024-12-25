@@ -209,7 +209,9 @@ class SourceMerger(mergeDefBodies: Boolean) {
       case (t1: Term.Apply, t2: Term.Apply) =>
         if ( // only handling one-arg functions...
           t1.args.length == 1 && t2.args.length == 1 &&
-          t1.fun.asInstanceOf[Term.Name].value ==
+            t1.fun.isInstanceOf[Term.Name] &&
+              t2.fun.isInstanceOf[Term.Name] &&
+            t1.fun.asInstanceOf[Term.Name].value ==
             t2.fun.asInstanceOf[Term.Name].value
         ) {
           val mergedArgClause = t1.argClause.copy(values =
@@ -247,4 +249,9 @@ class SourceMerger(mergeDefBodies: Boolean) {
     val newCases = overwritingCases.filterNot(usedOverwritingCases)
     overwrittenOriginalCases ++ newCases
   }
+}
+
+object SourceMerger {
+  def apply(mergeDefBodies: Boolean = true): SourceMerger =
+    new SourceMerger(mergeDefBodies)
 }

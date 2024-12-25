@@ -6,7 +6,7 @@ import scala.meta.dialects.Scala34
 
 class SourceMergerSuite extends munit.FunSuite {
 
-  val sourceMerger = new SourceMerger()
+  val sourceMerger = SourceMerger()
 
   test("SourceMerger.merge should just write second Source if first is empty") {
     val first = source""
@@ -200,7 +200,7 @@ class VetController() extends SharafController {
   def oldDef2 = "bbb"
 }
     """
-    val result = SourceMerger(mergeDefBody = false).merge(first, second)
+    val result = SourceMerger(mergeDefBodies = false).merge(first, second)
     assertEquals(result.structure, expected.structure)
   }
 
@@ -293,4 +293,43 @@ class VetController() extends SharafController {
     assertEquals(result2.structure, original.structure)
   }
 
+
+  test("should not reorder definitions v2") {
+    val generated =
+      source"""
+package ba.sake.petstore.controllers
+import io.undertow.util.StatusCodes
+import ba.sake.querson.QueryStringRW
+import ba.sake.sharaf.*, routing.*
+import ba.sake.petstore.models.*
+class UserController {
+  def routes = Routes {
+    case POST() -> Path("user") =>
+      val reqBody = Request.current.bodyJsonValidated[User]
+      Response.withStatus(StatusCodes.NOT_IMPLEMENTED).withBody("TODO: return User")
+    case POST() -> Path("user", "createWithList") =>
+      val reqBody = Request.current.bodyJsonValidated[Seq[User]]
+      Response.withStatus(StatusCodes.NOT_IMPLEMENTED).withBody("TODO: return User")
+    case GET() -> Path("user", "login") =>
+      case class QP(username: Option[String], password: Option[String]) derives QueryStringRW
+      val qp = Request.current.queryParamsValidated[QP]
+      Response.withStatus(StatusCodes.NOT_IMPLEMENTED).withBody("TODO: return String")
+    case GET() -> Path("user", "logout") =>
+      Response.withStatus(StatusCodes.NOT_IMPLEMENTED)
+    case GET() -> Path("user", username) =>
+      Response.withStatus(StatusCodes.NOT_IMPLEMENTED).withBody("TODO: return User")
+    case PUT() -> Path("user", username) =>
+      val reqBody = Request.current.bodyJsonValidated[User]
+      Response.withStatus(StatusCodes.NOT_IMPLEMENTED)
+    case DELETE() -> Path("user", username) =>
+      Response.withStatus(StatusCodes.NOT_IMPLEMENTED)
+  }
+}
+      """
+    val result1 = sourceMerger.merge(generated, generated)
+    assertEquals(result1.structure, generated.structure)
+    // and again..
+    val result2 = sourceMerger.merge(result1, generated)
+    assertEquals(result2.structure, generated.structure)
+  }
 }
