@@ -182,15 +182,15 @@ class SourceMerger(mergeDefBodies: Boolean) {
     newStats.foreach {
       case v2: Import =>
         val indexOfLastImport =
-          overwritingStats.lastIndexWhere(s => s.isInstanceOf[Import])
+          overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Import])
         overwrittenOriginalStats.insert(indexOfLastImport + 1, v2)
       case v2: Defn.Val =>
-        val indexOfLastValVar = overwritingStats.lastIndexWhere(s =>
+        val indexOfLastValVar = overwrittenOriginalStats.lastIndexWhere(s =>
           s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var]
         )
         overwrittenOriginalStats.insert(indexOfLastValVar + 1, v2)
       case v2: Defn.Var =>
-        val indexOfLastValVar = overwritingStats.lastIndexWhere(s =>
+        val indexOfLastValVar = overwrittenOriginalStats.lastIndexWhere(s =>
           s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var]
         )
         overwrittenOriginalStats.insert(indexOfLastValVar + 1, v2)
@@ -209,9 +209,9 @@ class SourceMerger(mergeDefBodies: Boolean) {
       case (t1: Term.Apply, t2: Term.Apply) =>
         if ( // only handling one-arg functions...
           t1.args.length == 1 && t2.args.length == 1 &&
-            t1.fun.isInstanceOf[Term.Name] &&
-              t2.fun.isInstanceOf[Term.Name] &&
-            t1.fun.asInstanceOf[Term.Name].value ==
+          t1.fun.isInstanceOf[Term.Name] &&
+          t2.fun.isInstanceOf[Term.Name] &&
+          t1.fun.asInstanceOf[Term.Name].value ==
             t2.fun.asInstanceOf[Term.Name].value
         ) {
           val mergedArgClause = t1.argClause.copy(values =
