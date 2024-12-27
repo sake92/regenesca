@@ -8,9 +8,9 @@ class SourceMergerSuite extends munit.FunSuite {
 
   val sourceMerger = SourceMerger()
 
-  test("SourceMerger.merge should just write second Source if first is empty") {
+  test("should just write generated Source if first is empty") {
     val first = source""
-    val second = source"""
+    val generated = source"""
 package ba.sake.sharaf.petclinic.web.controllers
 import ba.sake.sharaf.*, routing.*
 class VetController() extends SharafController {
@@ -21,12 +21,12 @@ class VetController() extends SharafController {
   }
 }
     """
-    val result = sourceMerger.merge(first, second)
-    assert(result.isEqual(second))
+    val result = sourceMerger.merge(first, generated)
+    assert(result.isEqual(generated))
   }
 
   test(
-    "SourceMerger.merge should not touch anything if second Source is the same"
+    "should not touch anything if generated Source is the same"
   ) {
     val first = source"""
 package ba.sake.sharaf.petclinic.web.controllers
@@ -39,16 +39,16 @@ class VetController() extends SharafController {
   }
 }
     """
-    val second = first
-    val result1 = sourceMerger.merge(first, second)
-    assertEquals(result1.structure, second.structure)
+    val generated = first
+    val result1 = sourceMerger.merge(first, generated)
+    assertEqStructure(result1, generated)
     // even the second time! idempotent
-    val result2 = sourceMerger.merge(result1, second)
-    assertEquals(result2.structure, second.structure)
+    val result2 = sourceMerger.merge(result1, generated)
+    assertEqStructure(result2, generated)
   }
 
   test(
-    "SourceMerger.merge should add new vals and defs, leaving existing ones intact"
+    "should add new vals and defs, leaving existing ones intact"
   ) {
     val first = source"""
 package ba.sake.sharaf.petclinic.web.controllers
@@ -63,7 +63,7 @@ class VetController() extends SharafController {
   def oldMethod: Int = ???
 }
     """
-    val second = source"""
+    val generated = source"""
 package ba.sake.sharaf.petclinic.web.controllers
 import ba.sake.sharaf.*, routing.*
 class VetController() extends SharafController {
@@ -91,12 +91,12 @@ class VetController() extends SharafController {
   def newMethod: Int = ???
 }
     """
-    val result = sourceMerger.merge(first, second)
-    assertEquals(result.structure, expected.structure)
+    val result = sourceMerger.merge(first, generated)
+    assertEqStructure(result, expected)
   }
 
   test(
-    "SourceMerger.merge should overwrite same-named vals, leaving existing ones intact"
+    "should overwrite same-named vals, leaving existing ones intact"
   ) {
     val first = source"""
 package ba.sake.sharaf.petclinic.web.controllers
@@ -106,7 +106,7 @@ class VetController() extends SharafController {
   val oldVal2 = "bbb"
 }
     """
-    val second = source"""
+    val generated = source"""
 package ba.sake.sharaf.petclinic.web.controllers
 import ba.sake.sharaf.*, routing.*
 class VetController() extends SharafController {
@@ -121,13 +121,13 @@ class VetController() extends SharafController {
   val oldVal2 = "bbb"
 }
     """
-    val result = sourceMerger.merge(first, second)
-    assertEquals(result.structure, expected.structure)
+    val result = sourceMerger.merge(first, generated)
+    assertEqStructure(result, expected)
   }
 
   // this is not to screw up existing code
   test(
-    "SourceMerger.merge should overwrite vals inside methods, but leave expressions intact"
+    "should overwrite vals inside methods, but leave expressions intact"
   ) {
     val first = source"""
 package ba.sake.sharaf.petclinic.web.controllers
@@ -140,7 +140,7 @@ class VetController() extends SharafController {
   def oldDef2 = "bbb"
 }
     """
-    val second = source"""
+    val generated = source"""
 package ba.sake.sharaf.petclinic.web.controllers
 import ba.sake.sharaf.*, routing.*
 class VetController() extends SharafController {
@@ -161,12 +161,12 @@ class VetController() extends SharafController {
   def oldDef2 = "bbb"
 }
     """
-    val result = sourceMerger.merge(first, second)
-    assertEquals(result.structure, expected.structure)
+    val result = sourceMerger.merge(first, generated)
+    assertEqStructure(result, expected)
   }
 
   test(
-    "SourceMerger.merge should overwrite methods completely when mergeDefBody = false"
+    "should overwrite methods completely when mergeDefBody = false"
   ) {
     val first = source"""
 package ba.sake.sharaf.petclinic.web.controllers
@@ -179,7 +179,7 @@ class VetController() extends SharafController {
   def oldDef2 = "bbb"
 }
     """
-    val second = source"""
+    val generated = source"""
 package ba.sake.sharaf.petclinic.web.controllers
 import ba.sake.sharaf.*, routing.*
 class VetController() extends SharafController {
@@ -200,11 +200,11 @@ class VetController() extends SharafController {
   def oldDef2 = "bbb"
 }
     """
-    val result = SourceMerger(mergeDefBodies = false).merge(first, second)
-    assertEquals(result.structure, expected.structure)
+    val result = SourceMerger(mergeDefBodies = false).merge(first, generated)
+    assertEqStructure(result, expected)
   }
 
-  test("SourceMerger.merge should add new cases to partial function") {
+  test("should add new cases to partial function") {
     val first = source"""
 package ba.sake.sharaf.petclinic.web.controllers
 import ba.sake.sharaf.*, routing.*
@@ -216,7 +216,7 @@ class VetController() extends SharafController {
   }
 }
     """
-    val second = source"""
+    val generated = source"""
 package ba.sake.sharaf.petclinic.web.controllers
 import ba.sake.sharaf.*, routing.*
 class VetController() extends SharafController {
@@ -244,11 +244,11 @@ class VetController() extends SharafController {
   }
 }
     """
-    val result = sourceMerger.merge(first, second)
-    assertEquals(result.structure, expected.structure)
+    val result = sourceMerger.merge(first, generated)
+    assertEqStructure(result, expected)
   }
 
-  test("SourceMerger.merge should add new vals in case body") {
+  test("should add new vals in case body") {
     val first = source"""
       def routes = Routes {
         case GET() -> Path("vets") =>
@@ -256,7 +256,7 @@ class VetController() extends SharafController {
           Response.withStatus(200).withBody("whatever")
       }
     """
-    val second = source"""
+    val generated = source"""
       def routes = Routes {
         case GET() -> Path("vets") =>
           enum QpStatus derives QueryStringRW { case eeeeee }
@@ -266,19 +266,18 @@ class VetController() extends SharafController {
           Response.withStatus(200).withBody("whatever")
       }
     """
-    val result = sourceMerger.merge(first, second)
-    println(result.syntax)
-    assertEquals(result.structure, second.structure)
+    val result = sourceMerger.merge(first, generated)
+    assertEqStructure(result, generated)
   }
 
   test(
-    "SourceMerger.merge should blindly overwrite enums"
+    "should blindly overwrite enums"
   ) {
     val first = source"""
     enum Color:
       case Red
     """
-    val second = source"""
+    val generated = source"""
     enum Color:
       case Red, Blue
     """
@@ -286,8 +285,8 @@ class VetController() extends SharafController {
     enum Color:
       case Red, Blue
     """
-    val result = sourceMerger.merge(first, second)
-    assertEquals(result.structure, expected.structure)
+    val result = sourceMerger.merge(first, generated)
+    assertEqStructure(result, expected)
   }
 
   test("should not reorder definitions") {
@@ -310,10 +309,10 @@ class VetController() extends SharafController {
       }
       """
     val result1 = sourceMerger.merge(original, original)
-    assertEquals(result1.structure, original.structure)
+    assertEqStructure(result1, original)
     // and again..
     val result2 = sourceMerger.merge(result1, original)
-    assertEquals(result2.structure, original.structure)
+    assertEqStructure(result2, original)
   }
 
   test("should not reorder definitions v2") {
@@ -349,32 +348,35 @@ class UserController {
 }
       """
     val result1 = sourceMerger.merge(generated, generated)
-    assertEquals(result1.structure, generated.structure)
+    assertEqStructure(result1, generated)
     // and again..
     val result2 = sourceMerger.merge(result1, generated)
-    assertEquals(result2.structure, generated.structure)
+    assertEqStructure(result2, generated)
   }
 
   test("should add a class parameter") {
     val original = source"""  class Pet(id: Option[Long]) """
     val generated = source"""  class Pet(name: String) """
     val expected = source"""  class Pet(id: Option[Long], name: String) """
-    val result1 = sourceMerger.merge(original, generated)
-    assertEquals(result1.structure, expected.structure)
+    val merged = sourceMerger.merge(original, generated)
+    assertEqStructure(merged, expected)
+
   }
 
   test("should add a class parameter list") {
     val original = source""" case class Pet(id: Option[Long]) """
     val generated = source""" case class Pet(id: Option[Long], name: String)(email: String)  """
-    val result1 = sourceMerger.merge(original, generated)
-    assertEquals(result1.structure, generated.structure)
+    val merged = sourceMerger.merge(original, generated)
+    assertEqStructure(merged, generated)
   }
 
   test("should add a modifier") {
-    val original = source""" final class Pet(id: Option[Long]) """
+    val original = source""" final class Pet (id: Option[Long]) """
     val generated = source""" final class  Pet private(id: Option[Long]) """
-    val result1 = sourceMerger.merge(original, generated)
-    assertEquals(result1.structure, generated.structure)
+    val merged = sourceMerger.merge(original, generated)
+    assertEqStructure(merged, generated)
   }
 
+  private def assertEqStructure(obtained: Source, expected: Source) =
+    assertEquals(obtained.structure, expected.structure, obtained.syntax)
 }
