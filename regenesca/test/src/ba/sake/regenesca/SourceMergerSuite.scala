@@ -293,7 +293,6 @@ class VetController() extends SharafController {
     assertEquals(result2.structure, original.structure)
   }
 
-
   test("should not reorder definitions v2") {
     val generated =
       source"""
@@ -332,4 +331,27 @@ class UserController {
     val result2 = sourceMerger.merge(result1, generated)
     assertEquals(result2.structure, generated.structure)
   }
+
+  test("should add a class parameter") {
+    val original = source"""  class Pet(id: Option[Long]) """
+    val generated = source"""  class Pet(name: String) """
+    val expected = source"""  class Pet(id: Option[Long], name: String) """
+    val result1 = sourceMerger.merge(original, generated)
+    assertEquals(result1.structure, expected.structure)
+  }
+
+  test("should add a class parameter list") {
+    val original = source""" case class Pet(id: Option[Long]) """
+    val generated = source""" case class Pet(id: Option[Long], name: String)(email: String)  """
+    val result1 = sourceMerger.merge(original, generated)
+    assertEquals(result1.structure, generated.structure)
+  }
+
+  test("should add a modifier") {
+    val original = source""" final class Pet(id: Option[Long]) """
+    val generated = source""" final class  Pet private(id: Option[Long]) """
+    val result1 = sourceMerger.merge(original, generated)
+    assertEquals(result1.structure, generated.structure)
+  }
+
 }

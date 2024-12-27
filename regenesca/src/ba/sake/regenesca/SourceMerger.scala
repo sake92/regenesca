@@ -96,8 +96,8 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => d1
         }
       case e1: Defn.Enum =>
-        val overwritingEnumsMap = overwritingStats.collect {
-          case e2: Defn.Enum => e2.name.value -> e2
+        val overwritingEnumsMap = overwritingStats.collect { case e2: Defn.Enum =>
+          e2.name.value -> e2
         }.toMap
         overwritingEnumsMap.get(e1.name.value) match {
           case Some(e2) =>
@@ -106,34 +106,61 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => e1
         }
       case c1: Defn.Class =>
-        val overwritingClassesMap = overwritingStats.collect {
-          case c2: Defn.Class => c2.name.value -> c2
+        val overwritingClassesMap = overwritingStats.collect { case c2: Defn.Class =>
+          c2.name.value -> c2
         }.toMap
         overwritingClassesMap.get(c1.name.value) match {
           case Some(c2) =>
             usedOverwritingStats += c2
-            val mergedTemplStats =
-              overwriteStats(c1.templ.stats, c2.templ.stats)
+            var usedOverwritingParamClauses: Set[Term.ParamClause] = Set.empty
+            val overwrittenParamClauses =
+              c1.ctor.paramClauses.zipWithIndex.map { case (paramClause1, i) =>
+                c2.ctor.paramClauses.lift(i) match {
+                  case Some(paramClause2) =>
+                    usedOverwritingParamClauses += paramClause2
+                    val overwritingParamsMap = paramClause2.values
+                      .map(p2 => p2.name.value -> p2)
+                      .toMap
+                    var usedOverwritingParams: Set[Term.Param] = Set.empty
+                    val overwrittenParams = paramClause1.values.map { param1 =>
+                      overwritingParamsMap.get(param1.name.value) match {
+                        case Some(overwritingParam) =>
+                          usedOverwritingParams += overwritingParam
+                          overwritingParam
+                        case None =>
+                          param1
+                      }
+                    }
+                    val params = overwrittenParams ++ paramClause2.values.filterNot(usedOverwritingParams)
+                    paramClause1.copy(values = params)
+                  case None => paramClause1
+                }
+              }
+            val paramClauses = overwrittenParamClauses ++ c2.ctor.paramClauses.filterNot(usedOverwritingParamClauses)
+            val mergedTemplStats = overwriteStats(c1.templ.stats, c2.templ.stats)
             val mergedTempl = c1.templ.copy(stats = mergedTemplStats)
-            c1.copy(templ = mergedTempl)
+            val mods = (c1.ctor.mods ++ c2.ctor.mods).distinct
+            c1.copy(
+              templ = mergedTempl,
+              ctor = c1.ctor.copy(paramClauses = paramClauses, mods = mods, name = c1.ctor.name)
+            )
           case None => c1
         }
       case t1: Defn.Trait =>
-        val overwritingTraitsMap = overwritingStats.collect {
-          case t2: Defn.Trait => t2.name.value -> t2
+        val overwritingTraitsMap = overwritingStats.collect { case t2: Defn.Trait =>
+          t2.name.value -> t2
         }.toMap
         overwritingTraitsMap.get(t1.name.value) match {
           case Some(t2) =>
             usedOverwritingStats += t2
-            val mergedTemplStats =
-              overwriteStats(t1.templ.stats, t2.templ.stats)
+            val mergedTemplStats = overwriteStats(t1.templ.stats, t2.templ.stats)
             val mergedTempl = t1.templ.copy(stats = mergedTemplStats)
             t1.copy(templ = mergedTempl)
           case None => t1
         }
       case o1: Defn.Object =>
-        val overwritingObjectsMap = overwritingStats.collect {
-          case o2: Defn.Object => o2.name.value -> o2
+        val overwritingObjectsMap = overwritingStats.collect { case o2: Defn.Object =>
+          o2.name.value -> o2
         }.toMap
         overwritingObjectsMap.get(o1.name.value) match {
           case Some(o2) =>
@@ -145,8 +172,8 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => o1
         }
       case t1: Defn.Type =>
-        val overwritingTraitsMap = overwritingStats.collect {
-          case t2: Defn.Type => t2.name.value -> t2
+        val overwritingTraitsMap = overwritingStats.collect { case t2: Defn.Type =>
+          t2.name.value -> t2
         }.toMap
         overwritingTraitsMap.get(t1.name.value) match {
           case Some(t2) =>
@@ -155,8 +182,8 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => t1
         }
       case g1: Defn.Given =>
-        val overwritingGivensMap = overwritingStats.collect {
-          case g2: Defn.Given => g2.name.value -> g2
+        val overwritingGivensMap = overwritingStats.collect { case g2: Defn.Given =>
+          g2.name.value -> g2
         }.toMap
         overwritingGivensMap.get(g1.name.value) match {
           case Some(g2) =>
@@ -165,8 +192,8 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => g1
         }
       case g1: Defn.GivenAlias =>
-        val overwritingGivensMap = overwritingStats.collect {
-          case g2: Defn.GivenAlias => g2.name.value -> g2
+        val overwritingGivensMap = overwritingStats.collect { case g2: Defn.GivenAlias =>
+          g2.name.value -> g2
         }.toMap
         overwritingGivensMap.get(g1.name.value) match {
           case Some(g2) =>
@@ -185,14 +212,12 @@ class SourceMerger(mergeDefBodies: Boolean) {
           overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Import])
         overwrittenOriginalStats.insert(indexOfLastImport + 1, v2)
       case v2: Defn.Val =>
-        val indexOfLastValVar = overwrittenOriginalStats.lastIndexWhere(s =>
-          s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var]
-        )
+        val indexOfLastValVar =
+          overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
         overwrittenOriginalStats.insert(indexOfLastValVar + 1, v2)
       case v2: Defn.Var =>
-        val indexOfLastValVar = overwrittenOriginalStats.lastIndexWhere(s =>
-          s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var]
-        )
+        val indexOfLastValVar =
+          overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
         overwrittenOriginalStats.insert(indexOfLastValVar + 1, v2)
       case other =>
         overwrittenOriginalStats.append(other)
@@ -214,11 +239,8 @@ class SourceMerger(mergeDefBodies: Boolean) {
           t1.fun.asInstanceOf[Term.Name].value ==
             t2.fun.asInstanceOf[Term.Name].value
         ) {
-          val mergedArgClause = t1.argClause.copy(values =
-            List(
-              merge2Terms(t1.argClause.values.head, t2.argClause.values.head)
-            )
-          )
+          val mergedArgClause =
+            t1.argClause.copy(values = List(merge2Terms(t1.argClause.values.head, t2.argClause.values.head)))
           t1.copy(fun = t1.fun, argClause = mergedArgClause)
         } else {
           originalTerm
