@@ -13,7 +13,8 @@ class SourceMerger(mergeDefBodies: Boolean) {
 
   private def overwriteStats(
       originalStats: List[Stat],
-      generatedStats: List[Stat]
+      generatedStats: List[Stat],
+      appendNewDefinitions: Boolean = true
   ): List[Stat] = {
     // dont consider new expressions at all!
     val overwritingStats = generatedStats.filterNot(_.isInstanceOf[Term])
@@ -206,21 +207,31 @@ class SourceMerger(mergeDefBodies: Boolean) {
     }.toBuffer
     /* insert new stats at appropriate position */
     val newStats = overwritingStats.filterNot(usedOverwritingStats)
-    newStats.foreach {
-      case v2: Import =>
-        val indexOfLastImport =
-          overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Import])
-        overwrittenOriginalStats.insert(indexOfLastImport + 1, v2)
-      case v2: Defn.Val =>
-        val indexOfLastValVar =
-          overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
-        overwrittenOriginalStats.insert(indexOfLastValVar + 1, v2)
-      case v2: Defn.Var =>
-        val indexOfLastValVar =
-          overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
-        overwrittenOriginalStats.insert(indexOfLastValVar + 1, v2)
-      case other =>
-        overwrittenOriginalStats.append(other)
+    locally {
+      val newImports = newStats.collect { case i2: Import => i2 }
+      usedOverwritingStats ++= newImports
+      val indexOfLastImport = overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Import])
+      overwrittenOriginalStats.insertAll(indexOfLastImport + 1, newImports)
+    }
+    locally {
+      val newVals = newStats.collect { case v2: Defn.Val => v2 }
+      usedOverwritingStats ++= newVals
+      val indexOfLastValVar =
+        overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
+      overwrittenOriginalStats.insertAll(indexOfLastValVar + 1, newVals)
+    }
+    locally {
+      val newVars = newStats.collect { case v2: Defn.Var => v2 }
+      usedOverwritingStats ++= newVars
+      val indexOfLastValVar =
+        overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
+      overwrittenOriginalStats.insertAll(indexOfLastValVar + 1, newVars)
+    }
+    locally {
+      val otherStats = overwritingStats.filterNot(usedOverwritingStats)
+      val indexOfLastImport = overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Import])
+      if (appendNewDefinitions) overwrittenOriginalStats.appendAll(otherStats)
+      else overwrittenOriginalStats.insertAll(indexOfLastImport + 1, otherStats) // in a block
     }
     overwrittenOriginalStats.toList
   }
@@ -228,7 +239,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
   private def merge2Terms(originalTerm: Term, overwriteTerm: Term): Term =
     (originalTerm, overwriteTerm) match {
       case (t1: Term.Block, t2: Term.Block) =>
-        val mergedStats = overwriteStats(t1.stats, t2.stats)
+        val mergedStats = overwriteStats(t1.stats, t2.stats, appendNewDefinitions = false)
         t1.copy(stats = mergedStats)
       case (t1: Term.Apply, t2: Term.Apply) =>
         if ( // only handling one-arg functions...
@@ -248,7 +259,10 @@ class SourceMerger(mergeDefBodies: Boolean) {
         // if it's just an expression like Response.withBody("")
         // and we add a block
         // just treat that expr as a block and merge them
+
         merge2Terms(q"{ ..${List(t1)} }", t2)
+      // val stats = t2.stats ++ List(t1)
+      // t2.copy(stats = stats)
       case (t1: Term.PartialFunction, t2: Term.PartialFunction) =>
         val mergedCases = mergeCases(t1.cases, t2.cases)
         t1.copy(cases = mergedCases)

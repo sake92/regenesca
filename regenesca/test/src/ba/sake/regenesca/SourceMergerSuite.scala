@@ -252,19 +252,18 @@ class VetController() extends SharafController {
     val first = source"""
       def routes = Routes {
         case GET() -> Path("vets") =>
+          val reqBody = Request.current.bodyJsonValidated[MyReq]
           Response.withStatus(200).withBody("whatever")
-        case GET() -> Path("vets2") =>
-          Response.withStatus(200).withBody("whatever", "2 args")
       }
     """
     val second = source"""
       def routes = Routes {
         case GET() -> Path("vets") =>
-          val pageReq = Request.current.queryParamsValidated[NewQP]
+          enum QpStatus derives QueryStringRW { case eeeeee }
+          case class QP(status: Option[QpStatus]) derives QueryStringRW
+          val reqBody = Request.current.bodyJsonValidated[MyReq]
+          val qp = Request.current.queryParamsValidated[NewQP]
           Response.withStatus(200).withBody("whatever")
-        case GET() -> Path("vets2") =>
-          val pageReq = Request.current.queryParamsValidated[NewQP]
-          Response.withStatus(200).withBody("whatever", "2 args")
       }
     """
     val result = sourceMerger.merge(first, second)
