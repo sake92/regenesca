@@ -228,7 +228,6 @@ class SourceMerger(mergeDefBodies: Boolean) {
   private def merge2Terms(originalTerm: Term, overwriteTerm: Term): Term =
     (originalTerm, overwriteTerm) match {
       case (t1: Term.Block, t2: Term.Block) =>
-        // this will only merge val definitions, maybe overwrite them
         val mergedStats = overwriteStats(t1.stats, t2.stats)
         t1.copy(stats = mergedStats)
       case (t1: Term.Apply, t2: Term.Apply) =>
@@ -245,6 +244,11 @@ class SourceMerger(mergeDefBodies: Boolean) {
         } else {
           originalTerm
         }
+      case (t1: Term.Apply, t2: Term.Block) =>
+        // if it's just an expression like Response.withBody("")
+        // and we add a block
+        // just treat that expr as a block and merge them
+        merge2Terms(q"{ ..${List(t1)} }", t2)
       case (t1: Term.PartialFunction, t2: Term.PartialFunction) =>
         val mergedCases = mergeCases(t1.cases, t2.cases)
         t1.copy(cases = mergedCases)

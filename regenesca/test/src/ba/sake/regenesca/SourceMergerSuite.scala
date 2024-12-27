@@ -248,6 +248,30 @@ class VetController() extends SharafController {
     assertEquals(result.structure, expected.structure)
   }
 
+  test("SourceMerger.merge should add new vals in case body") {
+    val first = source"""
+      def routes = Routes {
+        case GET() -> Path("vets") =>
+          Response.withStatus(200).withBody("whatever")
+        case GET() -> Path("vets2") =>
+          Response.withStatus(200).withBody("whatever", "2 args")
+      }
+    """
+    val second = source"""
+      def routes = Routes {
+        case GET() -> Path("vets") =>
+          val pageReq = Request.current.queryParamsValidated[NewQP]
+          Response.withStatus(200).withBody("whatever")
+        case GET() -> Path("vets2") =>
+          val pageReq = Request.current.queryParamsValidated[NewQP]
+          Response.withStatus(200).withBody("whatever", "2 args")
+      }
+    """
+    val result = sourceMerger.merge(first, second)
+    println(result.syntax)
+    assertEquals(result.structure, second.structure)
+  }
+
   test(
     "SourceMerger.merge should blindly overwrite enums"
   ) {
