@@ -4,7 +4,7 @@ rem This is a wrapper script, that automatically download mill from GitHub relea
 rem You can give the required mill version with --mill-version parameter
 rem If no version is given, it falls back to the value of DEFAULT_MILL_VERSION
 rem
-rem Project page: https://github.com/lefou/millw
+rem Original Project page: https://github.com/lefou/millw
 rem Script Version: 0.4.12
 rem
 rem If you want to improve this script, please also contribute your changes back!
@@ -68,7 +68,20 @@ if [!MILL_DOWNLOAD_PATH!]==[] (
 )
 
 rem without bat file extension, cmd doesn't seem to be able to run it
-set MILL=%MILL_DOWNLOAD_PATH%\!MILL_VERSION!.bat
+
+set "MILL_NATIVE_SUFFIX=-native"
+set "FULL_MILL_VERSION=%MILL_VERSION%"
+set "MILL_EXT=.bat"
+set "ARTIFACT_SUFFIX="
+REM Check if MILL_VERSION contains MILL_NATIVE_SUFFIX
+echo %MILL_VERSION% | findstr /C:"%MILL_NATIVE_SUFFIX%" >nul
+if %errorlevel% equ 0 (
+    set "MILL_VERSION=%MILL_VERSION:-native=%"
+    set "ARTIFACT_SUFFIX=-native-windows-amd64"
+    set "MILL_EXT=.exe"
+)
+
+set MILL=%MILL_DOWNLOAD_PATH%\!FULL_MILL_VERSION!!MILL_EXT!
 
 if not exist "%MILL%" (
     set VERSION_PREFIX=%MILL_VERSION:~0,4%
@@ -134,7 +147,7 @@ if not exist "%MILL%" (
     set DOWNLOAD_FILE=%MILL%.tmp
 
     if [!DOWNLOAD_FROM_MAVEN!]==[1] (
-        set DOWNLOAD_URL=https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/!MILL_VERSION!/mill-dist-!MILL_VERSION!.jar
+        set DOWNLOAD_URL=https://repo1.maven.org/maven2/com/lihaoyi/mill-dist!ARTIFACT_SUFFIX!/!MILL_VERSION!/mill-dist!ARTIFACT_SUFFIX!-!MILL_VERSION!.jar
     ) else (
         set DOWNLOAD_URL=!GITHUB_RELEASE_CDN!%MILL_REPO_URL%/releases/download/!MILL_VERSION_TAG!/!MILL_VERSION!!DOWNLOAD_SUFFIX!
     )
