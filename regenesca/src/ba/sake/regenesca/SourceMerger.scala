@@ -6,8 +6,7 @@ import scala.meta.contrib._
 class SourceMerger(mergeDefBodies: Boolean) {
 
   def merge(originalSource: Source, overwriteSource: Source): Source = {
-    val overwrittenStats =
-      overwriteStats(originalSource.stats, overwriteSource.stats)
+    val overwrittenStats =      overwriteStats(originalSource.stats, overwriteSource.stats)
     originalSource.copy(stats = overwrittenStats)
   }
 
@@ -19,11 +18,59 @@ class SourceMerger(mergeDefBodies: Boolean) {
     // dont consider new expressions at all!
     val overwritingStats = generatedStats.filterNot(_.isInstanceOf[Term])
     var usedOverwritingStats: Set[Stat] = Set.empty
+    // map keys are just strings!
+    val overwritingPkgsMap = overwritingStats.collect { case p2: Pkg =>
+      p2.name.value -> p2
+    }.toMap
+    val overwritingImports = overwritingStats.collect { case i2: Import =>
+      i2
+    }
+    val overwritingValsMap = overwritingStats
+      .collect { case v2: Defn.Val => v2 }
+      .flatMap { v =>
+        v.pats.headOption.collect { case p: Pat.Var =>
+          p.name.value -> v
+        }
+      }
+      .toMap
+    val overwritingVarsMap = overwritingStats
+      .collect { case v2: Defn.Var => v2 }
+      .flatMap { v =>
+        v.pats.headOption.collect { case p: Pat.Var =>
+          p.name.value -> v
+        }
+      }
+      .toMap
+    val overwritingDefsMap = overwritingStats.collect { case d2: Defn.Def =>
+      d2.name.value -> d2
+    }.toMap
+    val overwritingEnumsMap = overwritingStats.collect { case e2: Defn.Enum =>
+      e2.name.value -> e2
+    }.toMap
+    val overwritingClassesMap = overwritingStats.collect { case c2: Defn.Class =>
+      c2.name.value -> c2
+    }.toMap
+    val overwritingTraitsMap = overwritingStats.collect { case t2: Defn.Trait =>
+      t2.name.value -> t2
+    }.toMap
+    val overwritingObjectsMap = overwritingStats.collect { case o2: Defn.Object =>
+      o2.name.value -> o2
+    }.toMap
+    val overwritingTypesMap = overwritingStats.collect { case t2: Defn.Type =>
+      t2.name.value -> t2
+    }.toMap
+    val overwritingGivensMap = overwritingStats.collect { case g2: Defn.Given =>
+      // try to encode a "name" for anonymous givens...
+      val key = g2.name + g2.templ.inits.map(_.structure).mkString("-")
+      key -> g2
+    }.toMap
+    val overwritingGivenAliasesMap = overwritingStats.collect { case g2: Defn.GivenAlias =>
+      g2.decltpe.structure -> g2
+    }.toMap
+
+    /* do the merging */
     val overwrittenOriginalStats = originalStats.map {
       case p1: Pkg =>
-        val overwritingPkgsMap = overwritingStats.collect { case p2: Pkg =>
-          p2.name.value -> p2
-        }.toMap
         overwritingPkgsMap.get(p1.name.value) match {
           case Some(p2) =>
             usedOverwritingStats += p2
@@ -32,9 +79,6 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => p1
         }
       case i1: Import =>
-        val overwritingImports = overwritingStats.collect { case i2: Import =>
-          i2
-        }
         overwritingImports.find(_.isEqual(i1)) match {
           case Some(i2) =>
             usedOverwritingStats += i2
@@ -42,14 +86,6 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => i1
         }
       case v1: Defn.Val =>
-        val overwritingValsMap = overwritingStats
-          .collect { case v2: Defn.Val => v2 }
-          .flatMap { v =>
-            v.pats.headOption.collect { case p: Pat.Var =>
-              p.name.value -> v
-            }
-          }
-          .toMap
         val v1Name = v1.pats.headOption
           .collect { case p: Pat.Var =>
             p.name.value
@@ -62,29 +98,18 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => v1
         }
       case v1: Defn.Var =>
-        val overwritingValsMap = overwritingStats
-          .collect { case v2: Defn.Var => v2 }
-          .flatMap { v =>
-            v.pats.headOption.collect { case p: Pat.Var =>
-              p.name.value -> v
-            }
-          }
-          .toMap
         val v1Name = v1.pats.headOption
           .collect { case p: Pat.Var =>
             p.name.value
           }
           .getOrElse("")
-        overwritingValsMap.get(v1Name) match {
+        overwritingVarsMap.get(v1Name) match {
           case Some(v2) =>
             usedOverwritingStats += v2
             v2
           case None => v1
         }
       case d1: Defn.Def =>
-        val overwritingDefsMap = overwritingStats.collect { case d2: Defn.Def =>
-          d2.name.value -> d2
-        }.toMap
         overwritingDefsMap.get(d1.name.value) match {
           case Some(d2) =>
             usedOverwritingStats += d2
@@ -97,9 +122,6 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => d1
         }
       case e1: Defn.Enum =>
-        val overwritingEnumsMap = overwritingStats.collect { case e2: Defn.Enum =>
-          e2.name.value -> e2
-        }.toMap
         overwritingEnumsMap.get(e1.name.value) match {
           case Some(e2) =>
             usedOverwritingStats += e2
@@ -107,9 +129,6 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => e1
         }
       case c1: Defn.Class =>
-        val overwritingClassesMap = overwritingStats.collect { case c2: Defn.Class =>
-          c2.name.value -> c2
-        }.toMap
         overwritingClassesMap.get(c1.name.value) match {
           case Some(c2) =>
             usedOverwritingStats += c2
@@ -148,9 +167,6 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => c1
         }
       case t1: Defn.Trait =>
-        val overwritingTraitsMap = overwritingStats.collect { case t2: Defn.Trait =>
-          t2.name.value -> t2
-        }.toMap
         overwritingTraitsMap.get(t1.name.value) match {
           case Some(t2) =>
             usedOverwritingStats += t2
@@ -160,9 +176,6 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => t1
         }
       case o1: Defn.Object =>
-        val overwritingObjectsMap = overwritingStats.collect { case o2: Defn.Object =>
-          o2.name.value -> o2
-        }.toMap
         overwritingObjectsMap.get(o1.name.value) match {
           case Some(o2) =>
             usedOverwritingStats += o2
@@ -173,34 +186,28 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case None => o1
         }
       case t1: Defn.Type =>
-        val overwritingTraitsMap = overwritingStats.collect { case t2: Defn.Type =>
-          t2.name.value -> t2
-        }.toMap
-        overwritingTraitsMap.get(t1.name.value) match {
+        overwritingTypesMap.get(t1.name.value) match {
           case Some(t2) =>
             usedOverwritingStats += t2
             t2
           case None => t1
         }
       case g1: Defn.Given =>
-        val overwritingGivensMap = overwritingStats.collect { case g2: Defn.Given =>
-          g2.name.value -> g2
-        }.toMap
-        overwritingGivensMap.get(g1.name.value) match {
+        // try to encode a "name" for anonymous givens...
+        val key = g1.name + g1.templ.inits.map(_.structure).mkString("-")
+        overwritingGivensMap.get(key) match {
           case Some(g2) =>
             usedOverwritingStats += g2
             g2
           case None => g1
         }
       case g1: Defn.GivenAlias =>
-        val overwritingGivensMap = overwritingStats.collect { case g2: Defn.GivenAlias =>
-          g2.name.value -> g2
-        }.toMap
-        overwritingGivensMap.get(g1.name.value) match {
+        overwritingGivenAliasesMap.get(g1.decltpe.structure) match {
           case Some(g2) =>
             usedOverwritingStats += g2
             g2
-          case None => g1
+          case None =>
+            g1
         }
       // leave other statements intact
       case other => other
