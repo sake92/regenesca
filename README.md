@@ -9,8 +9,6 @@ It only *changes what it needs to*.
 This means you can **add your own code into the generated one**, as long as it *does not clash* with it.
 The goal is to have a *minimally intrusive* code generator.
 
-It is best if you use it in combination with [Scalafmt](https://scalameta.org/scalafmt/), to minimize the git diff.
-
 ## How to use it?
 
 See the [example](/example) folder
@@ -40,3 +38,4 @@ The merge looks roughly as follows:
 ## Adopters
 
 - [Squery generator](https://github.com/sake92/squery) from version 0.6.0
+- [OpenApi4s generator](https://github.com/sake92/openapi4s)

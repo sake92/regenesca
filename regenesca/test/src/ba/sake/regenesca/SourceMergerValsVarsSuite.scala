@@ -35,7 +35,7 @@ class VetController() extends SharafController {
 }
     """
     val result = sourceMerger.merge(first, generated)
-    assertEqStructure(result, expected)
+    assertEqStructure(result.parse[Source].get, expected)
   }
 
   // this is not to screw up existing code
@@ -75,7 +75,7 @@ class VetController() extends SharafController {
 }
     """
     val result = sourceMerger.merge(first, generated)
-    assertEqStructure(result, expected)
+    assertEqStructure(result.parse[Source].get, expected)
   }
 
   test("should add new vals in case body") {
@@ -97,9 +97,14 @@ class VetController() extends SharafController {
       }
     """
     val result = sourceMerger.merge(first, generated)
-    assertEqStructure(result, generated)
+    assertEqStructure(result.parse[Source].get, generated)
   }
 
-  private def assertEqStructure(obtained: Source, expected: Source) =
+  private def assertEqStructure(obtained: Source, expected: Source, debug: Boolean = false) = {
+    if (debug) {
+      println("*" * 50)
+      println(obtained.syntax)
+    }
     assertEquals(obtained.structure, expected.structure, obtained.syntax)
+  }
 }

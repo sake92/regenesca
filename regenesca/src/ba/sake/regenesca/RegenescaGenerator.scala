@@ -13,17 +13,14 @@ class RegenescaGenerator(merger: SourceMerger) {
       Files.createDirectories(filePath.getParent)
       if (Files.exists(filePath)) {
         val fileSource = readFileSource(filePath)
-        val regeneratedFileSource =
-          merger.merge(fileSource, generatedFileSource.source)
-        Files.writeString(filePath, regeneratedFileSource.syntax)
+        val regeneratedFileSource = merger.merge(fileSource, generatedFileSource.source)
+        Files.writeString(filePath, regeneratedFileSource)
       } else {
         Files.writeString(filePath, generatedFileSource.source.syntax)
       }
     }
 
-  private def readFileSource(
-      filePath: Path
-  )(implicit dialect: Dialect): Source = {
+  private def readFileSource(filePath: Path)(implicit dialect: Dialect): Source = {
     val bytes = Files.readAllBytes(filePath)
     val text = new String(bytes, "UTF-8")
     val input = Input.VirtualFile(filePath.toString, text)

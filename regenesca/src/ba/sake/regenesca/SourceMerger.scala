@@ -2,19 +2,28 @@ package ba.sake.regenesca
 
 import scala.meta._
 import scala.meta.contrib._
+import scalafix.patch._
+import scalafix.internal.patch._
 
 class SourceMerger(mergeDefBodies: Boolean) {
 
-  def merge(originalSource: Source, overwriteSource: Source): Source = {
-    val overwrittenStats =      overwriteStats(originalSource.stats, overwriteSource.stats)
-    originalSource.copy(stats = overwrittenStats)
+  def merge(originalSource: Source, overwriteSource: Source): String = {
+    if (originalSource.stats.isEmpty) {
+      overwriteSource.syntax
+    } else {
+      val patches = overwriteStats(originalSource.stats, overwriteSource.stats)
+      // println(s"GENERATED PATCHES: ${patches.mkString("\n")}")
+      val ctx = scalafix.v0.RuleCtx(originalSource)
+      PatchInternals.tokenPatchApply(ctx, None, patches)
+    }
   }
 
+  // TODO rename
   private def overwriteStats(
       originalStats: List[Stat],
       generatedStats: List[Stat],
       appendNewDefinitions: Boolean = true
-  ): List[Stat] = {
+  ): List[Patch] = {
     // dont consider new expressions at all!
     val overwritingStats = generatedStats.filterNot(_.isInstanceOf[Term])
     var usedOverwritingStats: Set[Stat] = Set.empty
@@ -69,21 +78,21 @@ class SourceMerger(mergeDefBodies: Boolean) {
     }.toMap
 
     /* do the merging */
-    val overwrittenOriginalStats = originalStats.map {
+    val patchesList: List[Patch] = originalStats.flatMap {
       case p1: Pkg =>
         overwritingPkgsMap.get(p1.name.value) match {
           case Some(p2) =>
             usedOverwritingStats += p2
-            val pkgStats = overwriteStats(p1.stats, p2.stats)
-            p1.copy(stats = pkgStats)
-          case None => p1
+            overwriteStats(p1.stats, p2.stats)
+          case None =>
+            List.empty
         }
       case i1: Import =>
         overwritingImports.find(_.isEqual(i1)) match {
           case Some(i2) =>
             usedOverwritingStats += i2
-            i1
-          case None => i1
+            List.empty
+          case None => List.empty
         }
       case v1: Defn.Val =>
         val v1Name = v1.pats.headOption
@@ -94,8 +103,9 @@ class SourceMerger(mergeDefBodies: Boolean) {
         overwritingValsMap.get(v1Name) match {
           case Some(v2) =>
             usedOverwritingStats += v2
-            v2
-          case None => v1
+            List(Patch.replaceTree(v1, v2.syntax))
+          case None =>
+            List.empty
         }
       case v1: Defn.Var =>
         val v1Name = v1.pats.headOption
@@ -106,27 +116,29 @@ class SourceMerger(mergeDefBodies: Boolean) {
         overwritingVarsMap.get(v1Name) match {
           case Some(v2) =>
             usedOverwritingStats += v2
-            v2
-          case None => v1
+            List(Patch.replaceTree(v1, v2.syntax))
+          case None =>
+            List.empty
         }
       case d1: Defn.Def =>
         overwritingDefsMap.get(d1.name.value) match {
           case Some(d2) =>
             usedOverwritingStats += d2
             if (mergeDefBodies) {
-              val mergedBody = merge2Terms(d1.body, d2.body)
-              d2.copy(body = mergedBody)
+              merge2Terms(d1.body, d2.body)
             } else {
-              d2
+              List(Patch.replaceTree(d1, d2.syntax))
             }
-          case None => d1
+          case None =>
+            List.empty
         }
       case e1: Defn.Enum =>
         overwritingEnumsMap.get(e1.name.value) match {
           case Some(e2) =>
             usedOverwritingStats += e2
-            e2
-          case None => e1
+            List(Patch.replaceTree(e1, e2.syntax))
+          case None =>
+            List.empty
         }
       case c1: Defn.Class =>
         overwritingClassesMap.get(c1.name.value) match {
@@ -134,7 +146,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
             usedOverwritingStats += c2
             var usedOverwritingParamClauses: Set[Term.ParamClause] = Set.empty
             val overwrittenParamClauses =
-              c1.ctor.paramClauses.zipWithIndex.map { case (paramClause1, i) =>
+              c1.ctor.paramClauses.zipWithIndex.flatMap { case (paramClause1, i) =>
                 c2.ctor.paramClauses.lift(i) match {
                   case Some(paramClause2) =>
                     usedOverwritingParamClauses += paramClause2
@@ -142,55 +154,65 @@ class SourceMerger(mergeDefBodies: Boolean) {
                       .map(p2 => p2.name.value -> p2)
                       .toMap
                     var usedOverwritingParams: Set[Term.Param] = Set.empty
-                    val overwrittenParams = paramClause1.values.map { param1 =>
+                    val overwriteParamPatches = paramClause1.values.flatMap { param1 =>
                       overwritingParamsMap.get(param1.name.value) match {
                         case Some(overwritingParam) =>
                           usedOverwritingParams += overwritingParam
-                          overwritingParam
+                          List(Patch.replaceTree(param1, overwritingParam.syntax))
                         case None =>
-                          param1
+                          List.empty
                       }
                     }
-                    val params = overwrittenParams ++ paramClause2.values.filterNot(usedOverwritingParams)
-                    paramClause1.copy(values = params)
-                  case None => paramClause1
+                    val newParams = paramClause2.values.filterNot(usedOverwritingParams)
+                    val newParamPatches = if (paramClause1.values.isEmpty) newParams.zipWithIndex.map { case (p2, i) =>
+                      val prefix = if (i == 0) "" else ", "
+                      Patch.addLeft(paramClause1.tokens.last, s"${prefix}${p2.syntax}")
+                    }
+                    else newParams.map(p2 => Patch.addRight(paramClause1.values.last, s", ${p2.syntax}"))
+                    overwriteParamPatches ++ newParamPatches
+                  case None =>
+                    List.empty
                 }
               }
-            val paramClauses = overwrittenParamClauses ++ c2.ctor.paramClauses.filterNot(usedOverwritingParamClauses)
+            val newParamClauses = c2.ctor.paramClauses.filterNot(usedOverwritingParamClauses)
+            val paramClauses = overwrittenParamClauses ++ newParamClauses.map { paramClause2 =>
+              Patch.addRight(c1.ctor.paramClauses.last.tokens.last, s"${paramClause2.syntax}")
+            }
             val mergedTemplStats = overwriteStats(c1.templ.stats, c2.templ.stats)
-            val mergedTempl = c1.templ.copy(stats = mergedTemplStats)
-            val mods = (c1.ctor.mods ++ c2.ctor.mods).distinct
-            c1.copy(
-              templ = mergedTempl,
-              ctor = c1.ctor.copy(paramClauses = paramClauses, mods = mods, name = c1.ctor.name)
-            )
-          case None => c1
+
+            val modsPatches = c2.ctor.mods.map { m2 =>
+              if (c1.ctor.mods.contains(m2)) Patch.empty
+              else if (c1.ctor.mods.isEmpty) Patch.addLeft(c1.ctor.paramClauses.head.tokens.head, s" ${m2.syntax}")
+              else Patch.addRight(c1.ctor.mods.last.tokens.last, s" ${m2.syntax}")
+            }
+            mergedTemplStats ++ paramClauses ++ modsPatches
+          case None =>
+            List.empty
         }
       case t1: Defn.Trait =>
         overwritingTraitsMap.get(t1.name.value) match {
           case Some(t2) =>
             usedOverwritingStats += t2
             val mergedTemplStats = overwriteStats(t1.templ.stats, t2.templ.stats)
-            val mergedTempl = t1.templ.copy(stats = mergedTemplStats)
-            t1.copy(templ = mergedTempl)
-          case None => t1
+            mergedTemplStats
+          case None =>
+            List.empty
         }
       case o1: Defn.Object =>
         overwritingObjectsMap.get(o1.name.value) match {
           case Some(o2) =>
             usedOverwritingStats += o2
-            val mergedTemplStats =
-              overwriteStats(o1.templ.stats, o2.templ.stats)
-            val mergedTempl = o1.templ.copy(stats = mergedTemplStats)
-            o1.copy(templ = mergedTempl)
-          case None => o1
+            overwriteStats(o1.templ.stats, o2.templ.stats)
+          case None =>
+            List.empty
         }
       case t1: Defn.Type =>
         overwritingTypesMap.get(t1.name.value) match {
           case Some(t2) =>
             usedOverwritingStats += t2
-            t2
-          case None => t1
+            List(Patch.replaceTree(t1, t2.syntax))
+          case None =>
+            List.empty
         }
       case g1: Defn.Given =>
         // try to encode a "name" for anonymous givens...
@@ -198,56 +220,82 @@ class SourceMerger(mergeDefBodies: Boolean) {
         overwritingGivensMap.get(key) match {
           case Some(g2) =>
             usedOverwritingStats += g2
-            g2
-          case None => g1
+            List(Patch.replaceTree(g1, g2.syntax))
+          case None =>
+            List.empty
         }
       case g1: Defn.GivenAlias =>
         overwritingGivenAliasesMap.get(g1.decltpe.structure) match {
           case Some(g2) =>
             usedOverwritingStats += g2
-            g2
+            List(Patch.replaceTree(g1, g2.syntax))
           case None =>
-            g1
+            List.empty
         }
       // leave other statements intact
-      case other => other
-    }.toBuffer
+      case _ =>
+        List.empty
+    }
+
+    val patches = patchesList.toBuffer
+
     /* insert new stats at appropriate position */
     val newStats = overwritingStats.filterNot(usedOverwritingStats)
     locally {
       val newImports = newStats.collect { case i2: Import => i2 }
       usedOverwritingStats ++= newImports
-      val indexOfLastImport = overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Import])
-      overwrittenOriginalStats.insertAll(indexOfLastImport + 1, newImports)
+      patches ++= newImports.flatMap(_.importers.map(i => Patch.addGlobalImport(i)))
     }
     locally {
       val newVals = newStats.collect { case v2: Defn.Val => v2 }
-      usedOverwritingStats ++= newVals
-      val indexOfLastValVar =
-        overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
-      overwrittenOriginalStats.insertAll(indexOfLastValVar + 1, newVals)
+      if (newVals.nonEmpty) {
+        usedOverwritingStats ++= newVals
+        val lastValVar =
+          originalStats
+            .findLast(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
+            .getOrElse(originalStats.last)
+        // try to keep existing indentation...
+        patches ++= newVals.map(v =>
+          Patch.addRight(lastValVar, "\n" + " " * lastValVar.pos.startColumn + s"${v.syntax}")
+        )
+      }
     }
     locally {
       val newVars = newStats.collect { case v2: Defn.Var => v2 }
-      usedOverwritingStats ++= newVars
-      val indexOfLastValVar =
-        overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
-      overwrittenOriginalStats.insertAll(indexOfLastValVar + 1, newVars)
+      if (newVars.nonEmpty) {
+        usedOverwritingStats ++= newVars
+        val lastValVar =
+          originalStats
+            .findLast(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
+            .getOrElse(originalStats.last)
+        patches ++= newVars.map(v =>
+          Patch.addRight(lastValVar, "\n" + " " * lastValVar.pos.startColumn + s"${v.syntax}")
+        )
+      }
     }
     locally {
       val otherStats = overwritingStats.filterNot(usedOverwritingStats)
-      val indexOfLastImport = overwrittenOriginalStats.lastIndexWhere(s => s.isInstanceOf[Import])
-      if (appendNewDefinitions) overwrittenOriginalStats.appendAll(otherStats)
-      else overwrittenOriginalStats.insertAll(indexOfLastImport + 1, otherStats) // in a block
+      if (otherStats.nonEmpty) {
+        val newPatches = if (appendNewDefinitions) {
+          val afterStat = originalStats.last
+          // println(s"INSERTING after $afterStat OTHER STATS: ${otherStats}")
+          otherStats.map(s => Patch.addRight(afterStat, "\n" + " " * afterStat.pos.startColumn + s"${s.syntax}"))
+        } else {
+          // in a block
+          val beforeStat = originalStats.head
+          // println(s"INSERTING before $beforeStat OTHER STATS: ${otherStats}")
+          otherStats.map(s => Patch.addLeft(beforeStat, s"${s.syntax}\n" + " " * beforeStat.pos.startColumn))
+        }
+        patches ++= newPatches
+      }
     }
-    overwrittenOriginalStats.toList
+    patches.toList
   }
 
-  private def merge2Terms(originalTerm: Term, overwriteTerm: Term): Term =
+  private def merge2Terms(originalTerm: Term, overwriteTerm: Term): List[Patch] =
     (originalTerm, overwriteTerm) match {
       case (t1: Term.Block, t2: Term.Block) =>
-        val mergedStats = overwriteStats(t1.stats, t2.stats, appendNewDefinitions = false)
-        t1.copy(stats = mergedStats)
+        overwriteStats(t1.stats, t2.stats, appendNewDefinitions = false)
       case (t1: Term.Apply, t2: Term.Apply) =>
         if ( // only handling one-arg functions...
           t1.args.length == 1 && t2.args.length == 1 &&
@@ -256,45 +304,45 @@ class SourceMerger(mergeDefBodies: Boolean) {
           t1.fun.asInstanceOf[Term.Name].value ==
             t2.fun.asInstanceOf[Term.Name].value
         ) {
-          val mergedArgClause =
-            t1.argClause.copy(values = List(merge2Terms(t1.argClause.values.head, t2.argClause.values.head)))
-          t1.copy(fun = t1.fun, argClause = mergedArgClause)
+          // val mergedArgClause =s
+          // t1.argClause.copy(values = List(merge2Terms(t1.argClause.values.head, t2.argClause.values.head)))
+          // t1.copy(fun = t1.fun, argClause = mergedArgClause)
+          merge2Terms(t1.argClause.values.head, t2.argClause.values.head)
         } else {
-          originalTerm
+          List.empty
         }
       case (t1: Term.Apply, t2: Term.Block) =>
         // if it's just an expression like Response.withBody("")
         // and we add a block
         // just treat that expr as a block and merge them
-
         merge2Terms(q"{ ..${List(t1)} }", t2)
-      // val stats = t2.stats ++ List(t1)
-      // t2.copy(stats = stats)
       case (t1: Term.PartialFunction, t2: Term.PartialFunction) =>
-        val mergedCases = mergeCases(t1.cases, t2.cases)
-        t1.copy(cases = mergedCases)
-      case _ => originalTerm
+        mergeCases(t1.cases, t2.cases)
+      case _ =>
+        List.empty
     }
 
   private def mergeCases(
       originalCases: List[Case],
       overwritingCases: List[Case]
-  ): List[Case] = {
+  ): List[Patch] = {
     var usedOverwritingCases: Set[Case] = Set.empty
     val overwritingCasesMap = overwritingCases.map { c2 =>
       c2.pat.structure -> c2
     }.toMap
-    val overwrittenOriginalCases = originalCases.map { c1 =>
+    val overwritePatches: List[Patch] = originalCases.flatMap { c1 =>
       overwritingCasesMap.get(c1.pat.structure) match {
         case Some(c2) =>
           usedOverwritingCases += c2
-          val mergedBody = merge2Terms(c1.body, c2.body)
-          c1.copy(body = mergedBody)
-        case None => c1
+          merge2Terms(c1.body, c2.body)
+        case None =>
+          List.empty
       }
     }
     val newCases = overwritingCases.filterNot(usedOverwritingCases)
-    overwrittenOriginalCases ++ newCases
+    overwritePatches ++ newCases.map(c =>
+      Patch.addRight(originalCases.last, "\n" + " " * originalCases.last.pos.startColumn + s"${c.syntax}")
+    )
   }
 }
 

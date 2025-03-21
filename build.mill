@@ -4,12 +4,11 @@ import $ivy.`com.lihaoyi::mill-contrib-sonatypecentral:`
 import $ivy.`de.tototec::de.tobiasroeser.mill.vcs.version::0.4.1`
 
 import mill._
-import mill.scalalib._
-import mill.scalalib.publish._
+import mill.scalalib._, scalafmt._, publish._
 import mill.contrib.sonatypecentral.SonatypeCentralPublishModule
 import de.tobiasroeser.mill.vcs.version.VcsVersion
 
-object regenesca extends ScalaModule with SonatypeCentralPublishModule {
+object regenesca extends ScalaModule with ScalafmtModule with SonatypeCentralPublishModule {
 
   def artifactName = "regenesca"
   def publishVersion = VcsVersion.vcsState().format()
@@ -29,7 +28,8 @@ object regenesca extends ScalaModule with SonatypeCentralPublishModule {
   def scalaVersion = "2.13.15"
 
   def ivyDeps = Agg(
-    ivy"org.scalameta::scalameta:4.9.9"
+    ivy"org.scalameta::scalameta:4.9.9",
+    ivy"ch.epfl.scala::scalafix-core:0.14.2"
   )
 
   object test extends ScalaTests with TestModule.Munit {
