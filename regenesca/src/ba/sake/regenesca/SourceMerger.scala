@@ -11,7 +11,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
     if (originalSource.stats.isEmpty) {
       overwriteSource.syntax
     } else {
-      val patches = overwriteStats(originalSource.stats, overwriteSource.stats)
+      val patches = patchStats(originalSource.stats, overwriteSource.stats)
       // println(s"GENERATED PATCHES: ${patches.mkString("\n")}")
       val ctx = scalafix.v0.RuleCtx(originalSource)
       PatchInternals.tokenPatchApply(ctx, None, patches)
@@ -19,7 +19,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
   }
 
   // TODO rename
-  private def overwriteStats(
+  private def patchStats(
       originalStats: List[Stat],
       generatedStats: List[Stat],
       appendNewDefinitions: Boolean = true
@@ -83,7 +83,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
         overwritingPkgsMap.get(p1.name.value) match {
           case Some(p2) =>
             usedOverwritingStats += p2
-            overwriteStats(p1.stats, p2.stats)
+            patchStats(p1.stats, p2.stats)
           case None =>
             List.empty
         }
@@ -125,7 +125,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
           case Some(d2) =>
             usedOverwritingStats += d2
             if (mergeDefBodies) {
-              merge2Terms(d1.body, d2.body)
+              patchTerms(d1.body, d2.body)
             } else {
               List(Patch.replaceTree(d1, d2.syntax))
             }
@@ -178,7 +178,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
             val paramClauses = overwrittenParamClauses ++ newParamClauses.map { paramClause2 =>
               Patch.addRight(c1.ctor.paramClauses.last.tokens.last, s"${paramClause2.syntax}")
             }
-            val mergedTemplStats = overwriteStats(c1.templ.stats, c2.templ.stats)
+            val mergedTemplStats = patchStats(c1.templ.stats, c2.templ.stats)
 
             val modsPatches = c2.ctor.mods.map { m2 =>
               if (c1.ctor.mods.contains(m2)) Patch.empty
@@ -193,8 +193,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
         overwritingTraitsMap.get(t1.name.value) match {
           case Some(t2) =>
             usedOverwritingStats += t2
-            val mergedTemplStats = overwriteStats(t1.templ.stats, t2.templ.stats)
-            mergedTemplStats
+            patchStats(t1.templ.stats, t2.templ.stats)
           case None =>
             List.empty
         }
@@ -202,7 +201,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
         overwritingObjectsMap.get(o1.name.value) match {
           case Some(o2) =>
             usedOverwritingStats += o2
-            overwriteStats(o1.templ.stats, o2.templ.stats)
+            patchStats(o1.templ.stats, o2.templ.stats)
           case None =>
             List.empty
         }
@@ -292,10 +291,10 @@ class SourceMerger(mergeDefBodies: Boolean) {
     patches.toList
   }
 
-  private def merge2Terms(originalTerm: Term, overwriteTerm: Term): List[Patch] =
+  private def patchTerms(originalTerm: Term, overwriteTerm: Term): List[Patch] =
     (originalTerm, overwriteTerm) match {
       case (t1: Term.Block, t2: Term.Block) =>
-        overwriteStats(t1.stats, t2.stats, appendNewDefinitions = false)
+        patchStats(t1.stats, t2.stats, appendNewDefinitions = false)
       case (t1: Term.Apply, t2: Term.Apply) =>
         if ( // only handling one-arg functions...
           t1.args.length == 1 && t2.args.length == 1 &&
@@ -304,10 +303,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
           t1.fun.asInstanceOf[Term.Name].value ==
             t2.fun.asInstanceOf[Term.Name].value
         ) {
-          // val mergedArgClause =s
-          // t1.argClause.copy(values = List(merge2Terms(t1.argClause.values.head, t2.argClause.values.head)))
-          // t1.copy(fun = t1.fun, argClause = mergedArgClause)
-          merge2Terms(t1.argClause.values.head, t2.argClause.values.head)
+          patchTerms(t1.argClause.values.head, t2.argClause.values.head)
         } else {
           List.empty
         }
@@ -315,14 +311,14 @@ class SourceMerger(mergeDefBodies: Boolean) {
         // if it's just an expression like Response.withBody("")
         // and we add a block
         // just treat that expr as a block and merge them
-        merge2Terms(q"{ ..${List(t1)} }", t2)
+        patchTerms(q"{ ..${List(t1)} }", t2)
       case (t1: Term.PartialFunction, t2: Term.PartialFunction) =>
-        mergeCases(t1.cases, t2.cases)
+        patchCases(t1.cases, t2.cases)
       case _ =>
         List.empty
     }
 
-  private def mergeCases(
+  private def patchCases(
       originalCases: List[Case],
       overwritingCases: List[Case]
   ): List[Patch] = {
@@ -334,7 +330,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
       overwritingCasesMap.get(c1.pat.structure) match {
         case Some(c2) =>
           usedOverwritingCases += c2
-          merge2Terms(c1.body, c2.body)
+          patchTerms(c1.body, c2.body)
         case None =>
           List.empty
       }

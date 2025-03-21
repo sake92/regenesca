@@ -18,7 +18,7 @@
 
 
 # RELEASE
-$VERSION="0.4.4"
+$VERSION="0.5.0"
 git commit --allow-empty -am "Release $VERSION"
 git tag -a $VERSION -m "Release $VERSION"
 git push --atomic origin main --tags
