@@ -5,7 +5,7 @@ import scala.meta.contrib._
 import scalafix.patch._
 import scalafix.internal.patch._
 
-class SourceMerger(mergeDefBodies: Boolean) {
+class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
 
   def merge(originalSource: Source, overwriteSource: Source): String = {
     if (originalSource.stats.isEmpty) {
@@ -311,7 +311,7 @@ class SourceMerger(mergeDefBodies: Boolean) {
         // if it's just an expression like Response.withBody("")
         // and we add a block
         // just treat that expr as a block and merge them
-        patchTerms(q"{ ..${List(t1)} }", t2)
+        patchTerms(Term.Block(List(t1)), t2)
       case (t1: Term.PartialFunction, t2: Term.PartialFunction) =>
         patchCases(t1.cases, t2.cases)
       case _ =>
@@ -343,6 +343,6 @@ class SourceMerger(mergeDefBodies: Boolean) {
 }
 
 object SourceMerger {
-  def apply(mergeDefBodies: Boolean = true): SourceMerger =
+  def apply(mergeDefBodies: Boolean = true)(implicit dialect: Dialect): SourceMerger =
     new SourceMerger(mergeDefBodies)
 }
