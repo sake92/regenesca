@@ -20,7 +20,7 @@ class SourceMergerValsVarsSuite extends BaseSuite {
       val oldVal2 = "bbb"
     """
     val result = sourceMerger.merge(first, generated)
-    assertEqStructure(result.parse[Source].get, expected)
+    assertEqStructure(result, expected)
   }
 
   // this is not to screw up existing code
@@ -46,7 +46,7 @@ class SourceMergerValsVarsSuite extends BaseSuite {
       def oldDef2 = "bbb"
     """
     val result = sourceMerger.merge(first, generated)
-    assertEqStructure(result.parse[Source].get, expected)
+    assertEqStructure(result, expected)
   }
 
   test("should add new vals in case body") {
@@ -66,6 +66,6 @@ class SourceMergerValsVarsSuite extends BaseSuite {
       }
     """
     val result = sourceMerger.merge(first, generated)
-    assertEqStructure(result.parse[Source].get, generated)
+    assertEqStructure(result, generated)
   }
 }

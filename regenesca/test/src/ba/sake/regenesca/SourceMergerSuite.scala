@@ -38,10 +38,10 @@ class VetController() extends SharafController {
 }
     """
     val generated = first
-    val result1 = sourceMerger.merge(first, generated).parse[Source].get
+    val result1 = sourceMerger.merge(first, generated)
     assertEqStructure(result1, generated)
     // even the second time! idempotent
-    val result2 = sourceMerger.merge(result1, generated).parse[Source].get
+    val result2 = sourceMerger.merge(result1.parse[Source].get, generated)
     assertEqStructure(result2, generated)
   }
 
@@ -85,7 +85,7 @@ class VetController() extends SharafController {
   }
 }
     """
-    val result = sourceMerger.merge(first, generated).parse[Source].get
+    val result = sourceMerger.merge(first, generated)
     assertEqStructure(result, expected)
   }
 
@@ -108,10 +108,10 @@ class VetController() extends SharafController {
         }
       }
       """
-    val result1 = sourceMerger.merge(original, original).parse[Source].get
+    val result1 = sourceMerger.merge(original, original)
     assertEqStructure(result1, original)
     // and again..
-    val result2 = sourceMerger.merge(result1, original).parse[Source].get
+    val result2 = sourceMerger.merge(result1.parse[Source].get, original)
     assertEqStructure(result2, original)
   }
 
@@ -147,10 +147,10 @@ class UserController {
   }
 }
       """
-    val result1 = sourceMerger.merge(generated, generated).parse[Source].get
+    val result1 = sourceMerger.merge(generated, generated)
     assertEqStructure(result1, generated)
     // and again..
-    val result2 = sourceMerger.merge(result1, generated).parse[Source].get
+    val result2 = sourceMerger.merge(result1.parse[Source].get, generated)
     assertEqStructure(result2, generated)
   }
 }

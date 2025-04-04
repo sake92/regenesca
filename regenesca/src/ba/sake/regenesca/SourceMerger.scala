@@ -7,7 +7,7 @@ import scalafix.internal.patch._
 
 class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
 
-  def merge(originalSource: Source, overwriteSource: Source): String = {
+  def merge(originalSource: Source, overwriteSource: Source): String =
     if (originalSource.stats.isEmpty) {
       overwriteSource.syntax
     } else {
@@ -16,7 +16,6 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
       val ctx = scalafix.v0.RuleCtx(originalSource)
       PatchInternals.tokenPatchApply(ctx, None, patches)
     }
-  }
 
   // TODO rename
   private def patchStats(

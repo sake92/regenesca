@@ -15,10 +15,10 @@ class SourceMergerGivensSuite extends BaseSuite {
       }
     """
     val result1 = sourceMerger.merge(original, original)
-    assertEqStructure(result1.parse[Source].get, original)
+    assertEqStructure(result1, original)
     // and again..
     val result2 = sourceMerger.merge(result1.parse[Source].get, original)
-    assertEqStructure(result2.parse[Source].get, original)
+    assertEqStructure(result2, original)
   }
 
   test("should not reorder given definitions") {
@@ -31,9 +31,9 @@ class SourceMergerGivensSuite extends BaseSuite {
       }
     """
     val result1 = sourceMerger.merge(original, original)
-    assertEqStructure(result1.parse[Source].get, original)
+    assertEqStructure(result1, original)
     // and again..
     val result2 = sourceMerger.merge(result1.parse[Source].get, original)
-    assertEqStructure(result2.parse[Source].get, original)
+    assertEqStructure(result2, original)
   }
 }

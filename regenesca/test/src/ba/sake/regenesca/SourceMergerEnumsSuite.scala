@@ -20,7 +20,7 @@ class SourceMergerEnumsSuite extends BaseSuite {
       enum Color:
         case Red, Blue
     """
-    val result = sourceMerger.merge(first, generated).parse[Source].get
+    val result = sourceMerger.merge(first, generated)
     assertEqStructure(result, expected)
   }
 

@@ -49,7 +49,7 @@ class VetController() extends SharafController {
   def newMethod: Int = ???
 }
     """
-    val result = sourceMerger.merge(first, generated).parse[Source].get
+    val result = sourceMerger.merge(first, generated)
     assertEqStructure(result, expected)
   }
 
@@ -88,7 +88,7 @@ class VetController() extends SharafController {
   def oldDef2 = "bbb"
 }
     """
-    val result = SourceMerger(mergeDefBodies = false).merge(first, generated).parse[Source].get
+    val result = SourceMerger(mergeDefBodies = false).merge(first, generated)
     assertEqStructure(result, expected)
   }
 
@@ -97,14 +97,14 @@ class VetController() extends SharafController {
       val original = source"""  class Pet() """
       val generated = source"""  class Pet(name: String) """
       val expected = source"""  class Pet(name: String) """
-      val merged = sourceMerger.merge(original, generated).parse[Source].get
+      val merged = sourceMerger.merge(original, generated)
       assertEqStructure(merged, expected)
     }
     locally {
       val original = source"""  class Pet(id: Option[Long]) """
       val generated = source"""  class Pet(id: Option[Long], name: String) """
       val expected = source"""  class Pet(id: Option[Long], name: String) """
-      val merged = sourceMerger.merge(original, generated).parse[Source].get
+      val merged = sourceMerger.merge(original, generated)
       assertEqStructure(merged, expected)
     }
   }
@@ -112,14 +112,14 @@ class VetController() extends SharafController {
   test("should add a class parameter list") {
     val original = source""" case class Pet(id: Option[Long]) """
     val generated = source""" case class Pet(id: Option[Long], name: String)(email: String)  """
-    val merged = sourceMerger.merge(original, generated).parse[Source].get
+    val merged = sourceMerger.merge(original, generated)
     assertEqStructure(merged, generated)
   }
 
   test("should add a modifier") {
     val original = source""" final class Pet (id: Option[Long]) """
     val generated = source""" final class  Pet private(id: Option[Long]) """
-    val merged = sourceMerger.merge(original, generated).parse[Source].get
+    val merged = sourceMerger.merge(original, generated)
     assertEqStructure(merged, generated)
   }
 
