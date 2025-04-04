@@ -5,7 +5,7 @@ import scala.meta.Source
 
 trait SourceMergerTest extends munit.FunSuite {
   
-  def assertEqStructure(obtained: Source, expected: Source, debug: Boolean = false): Unit = {
+  def assertEqStructure(obtained: Source, expected: Source, debug: Boolean = true): Unit = {
     if (debug) {
       println("*" * 50)
       println(obtained.syntax)
