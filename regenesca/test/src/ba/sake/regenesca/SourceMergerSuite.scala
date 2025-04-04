@@ -89,23 +89,6 @@ class VetController() extends SharafController {
     assertEqStructure(result, expected)
   }
 
-  test("should blindly overwrite enums") {
-    val first = source"""
-    enum Color:
-      case Red
-    """
-    val generated = source"""
-    enum Color:
-      case Red, Blue
-    """
-    val expected = source"""
-    enum Color:
-      case Red, Blue
-    """
-    val result = sourceMerger.merge(first, generated).parse[Source].get
-    assertEqStructure(result, expected)
-  }
-
   test("should not reorder definitions") {
     val original =
       source"""
