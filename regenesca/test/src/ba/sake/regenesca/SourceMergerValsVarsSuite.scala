@@ -3,7 +3,7 @@ package ba.sake.regenesca
 import scala.meta._
 import scala.meta.dialects.Scala34
 
-class SourceMergerValsVarsSuite extends SourceMergerTest {
+class SourceMergerValsVarsSuite extends BaseSuite {
 
   val sourceMerger = SourceMerger()
 
