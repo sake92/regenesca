@@ -1,78 +1,49 @@
 package ba.sake.regenesca
 
 import scala.meta._
-import scala.meta.contrib._
 import scala.meta.dialects.Scala34
 
-class SourceMergerValsVarsSuite extends munit.FunSuite {
+class SourceMergerValsVarsSuite extends SourceMergerTest {
 
   val sourceMerger = SourceMerger()
 
-  test(
-    "should overwrite same-named vals, leaving existing ones intact"
-  ) {
+  test("should overwrite same-named vals, leaving existing ones intact") {
     val first = source"""
-package ba.sake.sharaf.petclinic.web.controllers
-import ba.sake.sharaf.*, routing.*
-class VetController() extends SharafController {
-  val oldVal1 = "aaa"
-  val oldVal2 = "bbb"
-}
+      val oldVal1 = "aaa"
+      val oldVal2 = "bbb"
     """
     val generated = source"""
-package ba.sake.sharaf.petclinic.web.controllers
-import ba.sake.sharaf.*, routing.*
-class VetController() extends SharafController {
-  val oldVal1 = "ccc"
-}
+      val oldVal1 = "ccc"
     """
     val expected = source"""
-package ba.sake.sharaf.petclinic.web.controllers
-import ba.sake.sharaf.*, routing.*
-class VetController() extends SharafController {
-  val oldVal1 = "ccc"
-  val oldVal2 = "bbb"
-}
+      val oldVal1 = "ccc"
+      val oldVal2 = "bbb"
     """
     val result = sourceMerger.merge(first, generated)
     assertEqStructure(result.parse[Source].get, expected)
   }
 
   // this is not to screw up existing code
-  test(
-    "should overwrite vals inside methods, but leave expressions intact"
-  ) {
+  test("should overwrite vals inside methods, but leave expressions intact") {
     val first = source"""
-package ba.sake.sharaf.petclinic.web.controllers
-import ba.sake.sharaf.*, routing.*
-class VetController() extends SharafController {
-  def oldDef1 = {
-    val x = 1
-    x + x
-  }
-  def oldDef2 = "bbb"
-}
+      def oldDef1 = {
+        val x = 1
+        x + x
+      }
+      def oldDef2 = "bbb"
     """
     val generated = source"""
-package ba.sake.sharaf.petclinic.web.controllers
-import ba.sake.sharaf.*, routing.*
-class VetController() extends SharafController {
-  def oldDef1 = {
-    val x = 42
-    x + y // should NOT BE ACCEPTED !!!
-  }
-}
+      def oldDef1 = {
+        val x = 42
+        x + y // SHOULD NOT BE TOUCHED !!!
+      }
     """
     val expected = source"""
-package ba.sake.sharaf.petclinic.web.controllers
-import ba.sake.sharaf.*, routing.*
-class VetController() extends SharafController {
-  def oldDef1 = {
-    val x = 42
-    x + x
-  }
-  def oldDef2 = "bbb"
-}
+      def oldDef1 = {
+        val x = 42
+        x + x
+      }
+      def oldDef2 = "bbb"
     """
     val result = sourceMerger.merge(first, generated)
     assertEqStructure(result.parse[Source].get, expected)
@@ -89,8 +60,6 @@ class VetController() extends SharafController {
     val generated = source"""
       def routes = Routes {
         case GET() -> Path("vets") =>
-          enum QpStatus derives QueryStringRW { case eeeeee }
-          case class QP(status: Option[QpStatus]) derives QueryStringRW
           val reqBody = Request.current.bodyJsonValidated[MyReq]
           val qp = Request.current.queryParamsValidated[NewQP]
           Response.withStatus(200).withBody("whatever")
@@ -98,13 +67,5 @@ class VetController() extends SharafController {
     """
     val result = sourceMerger.merge(first, generated)
     assertEqStructure(result.parse[Source].get, generated)
-  }
-
-  private def assertEqStructure(obtained: Source, expected: Source, debug: Boolean = false) = {
-    if (debug) {
-      println("*" * 50)
-      println(obtained.syntax)
-    }
-    assertEquals(obtained.structure, expected.structure, obtained.syntax)
   }
 }

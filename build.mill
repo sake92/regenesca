@@ -1,14 +1,12 @@
 package build
 
-import $ivy.`com.lihaoyi::mill-contrib-sonatypecentral:`
 import $ivy.`de.tototec::de.tobiasroeser.mill.vcs.version::0.4.1`
 
 import mill._
 import mill.scalalib._, scalafmt._, publish._
-import mill.contrib.sonatypecentral.SonatypeCentralPublishModule
 import de.tobiasroeser.mill.vcs.version.VcsVersion
 
-object regenesca extends ScalaModule with ScalafmtModule with SonatypeCentralPublishModule {
+object regenesca extends ScalaModule with ScalafmtModule with PublishModule {
 
   def artifactName = "regenesca"
   def publishVersion = VcsVersion.vcsState().format()
