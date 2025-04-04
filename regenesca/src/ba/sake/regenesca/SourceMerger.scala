@@ -5,6 +5,8 @@ import scala.meta.contrib._
 import scalafix.patch._
 import scalafix.internal.patch._
 
+import scala.annotation.tailrec
+
 class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
 
   def merge(originalSource: Source, overwriteSource: Source): String =
@@ -253,9 +255,10 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
             .findLast(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
             .getOrElse(originalStats.last)
         // try to keep existing indentation...
-        patches ++= newVals.map(v =>
-          Patch.addRight(lastValVar, "\n" + " " * lastValVar.pos.startColumn + s"${v.syntax}")
-        )
+        patches ++= newVals.map { v =>
+          val indentedVal = StringUtils.indent(v.syntax, lastValVar.pos.startColumn)
+          Patch.addRight(lastValVar, "\n" + indentedVal)
+        }
       }
     }
     locally {
@@ -266,9 +269,10 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
           originalStats
             .findLast(s => s.isInstanceOf[Defn.Val] || s.isInstanceOf[Defn.Var])
             .getOrElse(originalStats.last)
-        patches ++= newVars.map(v =>
-          Patch.addRight(lastValVar, "\n" + " " * lastValVar.pos.startColumn + s"${v.syntax}")
-        )
+        patches ++= newVars.map { v =>
+          val indentedVar = StringUtils.indent(v.syntax, lastValVar.pos.startColumn)
+          Patch.addRight(lastValVar, "\n" + indentedVar)
+        }
       }
     }
     locally {
@@ -277,12 +281,18 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         val newPatches = if (appendNewDefinitions) {
           val afterStat = originalStats.last
           // println(s"INSERTING after $afterStat OTHER STATS: ${otherStats}")
-          otherStats.map(s => Patch.addRight(afterStat, "\n" + " " * afterStat.pos.startColumn + s"${s.syntax}"))
+          otherStats.map { s =>
+            val indentedStat = StringUtils.indent(s.syntax, afterStat.pos.startColumn)
+            Patch.addRight(afterStat, "\n" + indentedStat)
+          }
         } else {
           // in a block
           val beforeStat = originalStats.head
           // println(s"INSERTING before $beforeStat OTHER STATS: ${otherStats}")
-          otherStats.map(s => Patch.addLeft(beforeStat, s"${s.syntax}\n" + " " * beforeStat.pos.startColumn))
+          otherStats.map { s =>
+            val spaces = " " * beforeStat.pos.startColumn
+            Patch.addLeft(beforeStat, s"${s.syntax}\n" + spaces)
+          }
         }
         patches ++= newPatches
       }
@@ -290,6 +300,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
     patches.toList
   }
 
+  @tailrec
   private def patchTerms(originalTerm: Term, overwriteTerm: Term): List[Patch] =
     (originalTerm, overwriteTerm) match {
       case (t1: Term.Block, t2: Term.Block) =>
@@ -335,9 +346,10 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
       }
     }
     val newCases = overwritingCases.filterNot(usedOverwritingCases)
-    overwritePatches ++ newCases.map(c =>
-      Patch.addRight(originalCases.last, "\n" + " " * originalCases.last.pos.startColumn + s"${c.syntax}")
-    )
+    overwritePatches ++ newCases.map { c =>
+      val indentedCase = StringUtils.indent(c.syntax, originalCases.last.pos.startColumn)
+      Patch.addRight(originalCases.last, "\n" + indentedCase)
+    }
   }
 }
 
