@@ -13,7 +13,7 @@ object Example extends App {
   val sqlTables = Seq("user", "item", "customer")
   val generatedSources = sqlTables.map { sqlTable =>
     val filePath =
-      Paths.get(s"example/src/generated/${sqlTable.capitalize}.scala")
+      Paths.get(s"examples/hello/src/generated/${sqlTable.capitalize}.scala")
     GeneratedFileSource(filePath, generateSource(sqlTable))
   }
   generator.generate(generatedSources)
