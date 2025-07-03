@@ -1,2 +1,7 @@
+
 case class User()
-object User { val tableName = "user" }
+
+object User { 
+  val tableName = "user"
+  def customFunction = 42
+}
