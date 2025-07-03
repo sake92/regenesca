@@ -5,9 +5,7 @@ import scala.meta._
 
 class RegenescaGenerator(merger: SourceMerger)(implicit dialect: Dialect) {
 
-  def generate(
-      generatedFileSources: Seq[GeneratedFileSource]
-  ): Unit =
+  def generate(generatedFileSources: Seq[GeneratedFileSource]): Unit =
     generatedFileSources.foreach { generatedFileSource =>
       val filePath = generatedFileSource.file
       Files.createDirectories(filePath.getParent)

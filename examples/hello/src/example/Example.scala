@@ -1,9 +1,10 @@
 package example
 
+import ba.sake.regenesca._
+
 import java.nio.file._
 import scala.meta._
 import scala.meta.dialects.Scala34
-import ba.sake.regenesca._
 
 object Example extends App {
   val merger = SourceMerger()

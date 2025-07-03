@@ -37,7 +37,13 @@ object regenesca extends ScalaModule with ScalafmtModule with PublishModule {
   }
 }
 
-object example extends ScalaModule {
-  def scalaVersion = "2.13.15"
-  def moduleDeps = Seq(regenesca)
+object examples extends Module {
+  object hello extends ScalaModule {
+    def scalaVersion = "2.13.15"
+    def moduleDeps = Seq(regenesca)
+  }
+  object migration extends ScalaModule {
+    def scalaVersion = "2.13.15"
+    def moduleDeps = Seq(regenesca)
+  }
 }
