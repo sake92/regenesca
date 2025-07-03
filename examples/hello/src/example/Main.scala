@@ -6,7 +6,7 @@ import java.nio.file._
 import scala.meta._
 import scala.meta.dialects.Scala34
 
-object Example extends App {
+object Main extends App {
   val merger = SourceMerger()
   val generator = RegenescaGenerator(merger)
 

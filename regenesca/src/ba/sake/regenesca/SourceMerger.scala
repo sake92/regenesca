@@ -13,7 +13,8 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
     if (originalSource.stats.isEmpty) {
       overwriteSource.syntax
     } else {
-      val patches = patchStats(originalSource.stats, overwriteSource.stats)
+      val origSourceLastToken = originalSource.tokens.last
+      val patches = patchStats(origSourceLastToken, originalSource.stats, overwriteSource.stats)
       // println(s"GENERATED PATCHES: ${patches.mkString("\n")}")
       val ctx = scalafix.v0.RuleCtx(originalSource)
       PatchInternals.tokenPatchApply(ctx, None, patches)
@@ -21,6 +22,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
 
   // TODO rename
   private def patchStats(
+      origSourceLastToken: Token,
       originalStats: List[Stat],
       generatedStats: List[Stat],
       appendNewDefinitions: Boolean = true
@@ -84,7 +86,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         overwritingPkgsMap.get(p1.name.value) match {
           case Some(p2) =>
             usedOverwritingStats += p2
-            patchStats(p1.stats, p2.stats)
+            patchStats(origSourceLastToken, p1.stats, p2.stats)
           case None =>
             List.empty
         }
@@ -126,7 +128,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
           case Some(d2) =>
             usedOverwritingStats += d2
             if (mergeDefBodies) {
-              patchTerms(d1.body, d2.body)
+              patchTerms(d1.tokens.last, d1.body, d2.body)
             } else {
               List(Patch.replaceTree(d1, d2.syntax))
             }
@@ -179,7 +181,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
             val paramClauses = overwrittenParamClauses ++ newParamClauses.map { paramClause2 =>
               Patch.addRight(c1.ctor.paramClauses.last.tokens.last, s"${paramClause2.syntax}")
             }
-            val mergedTemplStats = patchStats(c1.templ.stats, c2.templ.stats)
+            val mergedTemplStats = patchStats(c1.tokens.last, c1.templ.stats, c2.templ.stats)
 
             val modsPatches = c2.ctor.mods.map { m2 =>
               if (c1.ctor.mods.contains(m2)) Patch.empty
@@ -194,7 +196,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         overwritingTraitsMap.get(t1.name.value) match {
           case Some(t2) =>
             usedOverwritingStats += t2
-            patchStats(t1.templ.stats, t2.templ.stats)
+            patchStats(t1.tokens.last, t1.templ.stats, t2.templ.stats)
           case None =>
             List.empty
         }
@@ -202,7 +204,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         overwritingObjectsMap.get(o1.name.value) match {
           case Some(o2) =>
             usedOverwritingStats += o2
-            patchStats(o1.templ.stats, o2.templ.stats)
+            patchStats(o1.tokens.last, o1.templ.stats, o2.templ.stats)
           case None =>
             List.empty
         }
@@ -279,11 +281,16 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
       val otherStats = overwritingStats.filterNot(usedOverwritingStats)
       if (otherStats.nonEmpty) {
         val newPatches = if (appendNewDefinitions) {
-          val afterStat = originalStats.last
+          val afterStat = originalStats.lastOption
           // println(s"INSERTING after $afterStat OTHER STATS: ${otherStats}")
           otherStats.map { s =>
-            val indentedStat = StringUtils.indent(s.syntax, afterStat.pos.startColumn)
-            Patch.addRight(afterStat, "\n" + indentedStat)
+            afterStat match {
+              case Some(after) =>
+                val indentedStat = StringUtils.indent(s.syntax, after.pos.startColumn)
+                Patch.addRight(after, "\n" + indentedStat)
+              case None =>
+                Patch.addLeft(origSourceLastToken, s.syntax)
+            }
           }
         } else {
           // in a block
@@ -301,10 +308,10 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
   }
 
   @tailrec
-  private def patchTerms(originalTerm: Term, overwriteTerm: Term): List[Patch] =
+  private def patchTerms(origSourceLastToken: Token, originalTerm: Term, overwriteTerm: Term): List[Patch] =
     (originalTerm, overwriteTerm) match {
       case (t1: Term.Block, t2: Term.Block) =>
-        patchStats(t1.stats, t2.stats, appendNewDefinitions = false)
+        patchStats(origSourceLastToken, t1.stats, t2.stats, appendNewDefinitions = false)
       case (t1: Term.Apply, t2: Term.Apply) =>
         if ( // only handling one-arg functions...
           t1.args.length == 1 && t2.args.length == 1 &&
@@ -313,7 +320,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
           t1.fun.asInstanceOf[Term.Name].value ==
             t2.fun.asInstanceOf[Term.Name].value
         ) {
-          patchTerms(t1.argClause.values.head, t2.argClause.values.head)
+          patchTerms(origSourceLastToken, t1.argClause.values.head, t2.argClause.values.head)
         } else {
           List.empty
         }
@@ -321,14 +328,15 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         // if it's just an expression like Response.withBody("")
         // and we add a block
         // just treat that expr as a block and merge them
-        patchTerms(Term.Block(List(t1)), t2)
+        patchTerms(origSourceLastToken, Term.Block(List(t1)), t2)
       case (t1: Term.PartialFunction, t2: Term.PartialFunction) =>
-        patchCases(t1.cases, t2.cases)
+        patchCases(origSourceLastToken, t1.cases, t2.cases)
       case _ =>
         List.empty
     }
 
   private def patchCases(
+      origSourceLastToken: Token,
       originalCases: List[Case],
       overwritingCases: List[Case]
   ): List[Patch] = {
@@ -340,7 +348,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
       overwritingCasesMap.get(c1.pat.structure) match {
         case Some(c2) =>
           usedOverwritingCases += c2
-          patchTerms(c1.body, c2.body)
+          patchTerms(origSourceLastToken, c1.body, c2.body)
         case None =>
           List.empty
       }
