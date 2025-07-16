@@ -1,12 +1,12 @@
+//| mill-version: 1.0.0
 package build
 
-import $ivy.`de.tototec::de.tobiasroeser.mill.vcs.version::0.4.1`
+import mill.*
+import mill.scalalib.*, publish.*
+import mill.javalib.SonatypeCentralPublishModule
+import mill.util.VcsVersion
 
-import mill._
-import mill.scalalib._, scalafmt._, publish._
-import de.tobiasroeser.mill.vcs.version.VcsVersion
-
-object regenesca extends ScalaModule with ScalafmtModule with PublishModule {
+object regenesca extends ScalaModule, SonatypeCentralPublishModule {
 
   def artifactName = "regenesca"
   def publishVersion = VcsVersion.vcsState().format()
@@ -25,14 +25,14 @@ object regenesca extends ScalaModule with ScalafmtModule with PublishModule {
 
   def scalaVersion = "2.13.15"
 
-  def ivyDeps = Agg(
-    ivy"org.scalameta::scalameta:4.9.9",
-    ivy"ch.epfl.scala::scalafix-core:0.14.2"
+  def mvnDeps = Seq(
+    mvn"org.scalameta::scalameta:4.9.9",
+    mvn"ch.epfl.scala::scalafix-core:0.14.2"
   )
 
   object test extends ScalaTests with TestModule.Munit {
-    def ivyDeps = Agg(
-      ivy"org.scalameta::munit::1.0.1"
+    def mvnDeps = Seq(
+      mvn"org.scalameta::munit::1.0.1"
     )
   }
 }

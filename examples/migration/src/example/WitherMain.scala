@@ -6,33 +6,32 @@ import scala.meta.dialects.Scala34
 import ba.sake.regenesca._
 
 object WitherMain extends App {
-  
+
   val filePath = Paths.get("examples/migration/src/refactor/MyClass.scala")
   val source = readFileSource(filePath)
-  
+
   val transformedSource = source
-    .transform {
-      case cls: Defn.Class =>
-        val hasWither = cls.mods.exists {
-          case mod: Mod.Annot => mod.text == "@Wither"
-          case _              => false
-        }
-        if (hasWither) {
-          val newWithers = makeWithers(cls.ctor.paramClauses.head.values, cls.templ.body.stats, cls.name)
-          val transformedBody = cls.templ.body.copy(
-            stats = cls.templ.body.stats ++ newWithers
+    .transform { case cls: Defn.Class =>
+      val hasWither = cls.mods.exists {
+        case mod: Mod.Annot => mod.text == "@Wither"
+        case _              => false
+      }
+      if (hasWither) {
+        val newWithers = makeWithers(cls.ctor.paramClauses.head.values, cls.templ.body.stats, cls.name)
+        val transformedBody = cls.templ.body.copy(
+          stats = cls.templ.body.stats ++ newWithers
+        )
+        cls.copy(
+          templ = cls.templ.copy(
+            earlyClause = cls.templ.earlyClause,
+            inits = cls.templ.inits,
+            body = transformedBody,
+            derives = cls.templ.derives
           )
-          cls.copy(
-            templ = cls.templ.copy(
-              earlyClause = cls.templ.earlyClause,
-              inits = cls.templ.inits,
-              body = transformedBody,
-              derives = cls.templ.derives
-            )
-          )
-        } else {
-          cls
-        }
+        )
+      } else {
+        cls
+      }
     }
     .asInstanceOf[Source]
 
