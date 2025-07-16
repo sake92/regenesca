@@ -10,7 +10,9 @@
 
 ./mill regenesca.test
 
-./mill example.run
+./mill examples.hello.run
+./mill examples.migration.run
+
 
 # for local dev/test
 ./mill  regenesca.publishLocal
