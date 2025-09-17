@@ -6,7 +6,7 @@
 
 ./mill clean
 
-./mill -i mill.scalalib.scalafmt/
+./mill mill.scalalib.scalafmt/
 
 ./mill regenesca.test
 

@@ -109,7 +109,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         overwritingValsMap.get(v1Name) match {
           case Some(v2) =>
             usedOverwritingStats += v2
-            List(Patch.replaceTree(v1, v2.syntax))
+            Option.when(v1.structure != v2.structure)(Patch.replaceTree(v1, v2.syntax)).toList
           case None =>
             List.empty
         }
@@ -122,7 +122,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         overwritingVarsMap.get(v1Name) match {
           case Some(v2) =>
             usedOverwritingStats += v2
-            List(Patch.replaceTree(v1, v2.syntax))
+            Option.when(v1.structure != v2.structure)(Patch.replaceTree(v1, v2.syntax)).toList
           case None =>
             List.empty
         }
@@ -133,7 +133,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
             if (mergeDefBodies) {
               patchTerms(d1.tokens.last, d1.body.tokens.nonEmpty, d1.body, d2.body)
             } else {
-              List(Patch.replaceTree(d1, d2.syntax))
+              Option.when(d1.structure != d2.structure)(Patch.replaceTree(d1, d2.syntax)).toList
             }
           case None =>
             List.empty
@@ -142,7 +142,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         overwritingEnumsMap.get(e1.name.value) match {
           case Some(e2) =>
             usedOverwritingStats += e2
-            List(Patch.replaceTree(e1, e2.syntax))
+            Option.when(e1.structure != e2.structure)(Patch.replaceTree(e1, e2.syntax)).toList
           case None =>
             List.empty
         }
@@ -164,7 +164,11 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
                       overwritingParamsMap.get(param1.name.value) match {
                         case Some(overwritingParam) =>
                           usedOverwritingParams += overwritingParam
-                          List(Patch.replaceTree(param1, overwritingParam.syntax))
+                          Option
+                            .when(param1.structure != overwritingParam.structure)(
+                              Patch.replaceTree(param1, overwritingParam.syntax)
+                            )
+                            .toList
                         case None =>
                           List.empty
                       }
@@ -215,7 +219,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         overwritingTypesMap.get(t1.name.value) match {
           case Some(t2) =>
             usedOverwritingStats += t2
-            List(Patch.replaceTree(t1, t2.syntax))
+            Option.when(t1.structure != t2.structure)(Patch.replaceTree(t1, t2.syntax)).toList
           case None =>
             List.empty
         }
@@ -225,7 +229,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         overwritingGivensMap.get(key) match {
           case Some(g2) =>
             usedOverwritingStats += g2
-            List(Patch.replaceTree(g1, g2.syntax))
+            Option.when(g1.structure != g2.structure)(Patch.replaceTree(g1, g2.syntax)).toList
           case None =>
             List.empty
         }
@@ -233,7 +237,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         overwritingGivenAliasesMap.get(g1.decltpe.structure) match {
           case Some(g2) =>
             usedOverwritingStats += g2
-            List(Patch.replaceTree(g1, g2.syntax))
+            Option.when(g1.structure != g2.structure)(Patch.replaceTree(g1, g2.syntax)).toList
           case None =>
             List.empty
         }
