@@ -11,7 +11,7 @@ The goal is to have a *minimally intrusive* code generator.
 
 ## How to use it?
 
-See the [example](/example) folder
+See the [examples](/examples) folder
 
 
 ## How it works?
