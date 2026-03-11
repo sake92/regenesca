@@ -1,0 +1,67 @@
+amends "https://sake92.github.io/deder/config/DederProject.pkl"
+
+local const baseTemplate: ScalaModule = new {
+  scalaVersion = "2.13.18"
+  publish = false
+}
+
+local const regenesca: CreateScalaModules = new {
+  _root = "regenesca"
+  _template = (baseTemplate) {
+    deps {
+      "ch.epfl.scala::scalafix-core:0.14.2"
+    }
+    publish = true
+    pomSettings {
+      groupId = "ba.sake"
+      artifactId = "regenesca"
+      version = "0.7.0-SNAPSHOT"
+      name = "Regenesca library"
+      description = "Regenesca library - Refactoring Generator of Source Code for Scala"
+      url = "https://github.com/sake92/regenesca"
+      licenses {
+        new PomLicense {
+          name = "Apache 2.0 License"
+          url = "https://opensource.org/license/apache-2.0"
+        }
+      }
+      developers {
+        new PomDeveloper {
+          id = "sake92"
+          name = "Sakib Hadžiavdić"
+          email = "sake92@sake.ba"
+        }
+      }
+      scm {
+        url = "git@github.com:sake92/regenesca.git"
+      }
+    }
+  }
+  _testTemplate = (baseTemplate.asTest()) {
+    deps {
+      "org.scalameta::munit:1.0.1"
+    }
+  }
+}
+
+local const hello: ScalaModule = (baseTemplate) {
+  id = "hello"
+  root = "examples/hello"
+  moduleDeps {
+    regenesca.get.main
+  }
+}
+
+local const migration: ScalaModule = (baseTemplate) {
+  id = "migration"
+  root = "examples/migration"
+  moduleDeps {
+    regenesca.get.main
+  }
+}
+
+modules {
+  ...regenesca.get.all
+  hello
+  migration
+}
