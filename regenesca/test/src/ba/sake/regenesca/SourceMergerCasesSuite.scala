@@ -5,6 +5,7 @@ import scala.meta.dialects.Scala34
 
 class SourceMergerCasesSuite extends BaseSuite {
 
+
   val sourceMerger = SourceMerger()
 
   test("should add new cases to partial function") {
