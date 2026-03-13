@@ -18,8 +18,7 @@ jobs:
           fetch-depth: 0
       - uses: coursier/cache-action@v7
         with:
-          extraFiles:
-            - deder.pkl
+          extraFiles: deder.pkl
       - uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
