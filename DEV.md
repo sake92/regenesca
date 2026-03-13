@@ -21,5 +21,4 @@ git commit --allow-empty -am "Release $VERSION"
 git tag -a $VERSION -m "Release $VERSION"
 git push --atomic origin main $VERSION
 
-
 ```
