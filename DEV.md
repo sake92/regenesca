@@ -20,7 +20,7 @@
 
 
 # RELEASE
-VERSION="0.6.3"
+VERSION="0.7.0"
 git commit --allow-empty -am "Release $VERSION"
 git tag -a $VERSION -m "Release $VERSION"
 git push --atomic origin main $VERSION

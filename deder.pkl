@@ -15,7 +15,7 @@ local const regenesca: CreateScalaModules = new {
     pomSettings {
       groupId = "ba.sake"
       artifactId = "regenesca"
-      version = "0.7.0-SNAPSHOT"
+      version = "0.7.0"
       name = "Regenesca library"
       description = "Regenesca library - Refactoring Generator of Source Code for Scala"
       url = "https://github.com/sake92/regenesca"
