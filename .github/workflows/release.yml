@@ -5,10 +5,14 @@ on:
       - "*"
 
 env:
-  PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
-  PGP_SECRET: ${{ secrets.PGP_SECRET }}
-  MILL_SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
-  MILL_SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+ #PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+ #PGP_SECRET: ${{ secrets.PGP_SECRET }}
+ #MILL_SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+ #MILL_SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+  DEDER_PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+  DEDER_PGP_SECRET: ${{ secrets.PGP_SECRET }}
+  DEDER_SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+  DEDER_SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
 
 jobs:
   tests:
@@ -23,16 +27,23 @@ jobs:
       - uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: '11'
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.PGP_SECRET }}
-          passphrase: ${{ secrets.PGP_PASSPHRASE }}
+          java-version: '21'
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@main
+      - name: Install deder
+        run: |
+          brew install sake92/tap/deder
       - name: Publish
-        run: >
-          ./mill -i mill.scalalib.SonatypeCentralPublishModule/publishAll \
-              --gpgArgs --passphrase=$PGP_PASSPHRASE,--no-tty,--pinentry-mode,loopback,--batch,--yes,-a,-b \
-              --publishArtifacts __.publishArtifacts \
-              --readTimeout 600000 \
-              --awaitTimeout 600000
+        run: deder exec -t publish
+    # - name: Import GPG key
+    #   uses: crazy-max/ghaction-import-gpg@v6
+    #   with:
+    #     gpg_private_key: ${{ secrets.PGP_SECRET }}
+    #     passphrase: ${{ secrets.PGP_PASSPHRASE }}
+    # - name: Publish
+    #   run: >
+    #     ./mill -i mill.scalalib.SonatypeCentralPublishModule/publishAll \
+    #         --gpgArgs --passphrase=$PGP_PASSPHRASE,--no-tty,--pinentry-mode,loopback,--batch,--yes,-a,-b \
+    #         --publishArtifacts __.publishArtifacts \
+    #         --readTimeout 600000 \
+    #         --awaitTimeout 600000
