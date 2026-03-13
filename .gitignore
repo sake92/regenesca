@@ -9,15 +9,11 @@ target/
 .metals/
 .bsp/
 .vscode/
+.scala-build/
 
 out/
 
-.scala-build/
 
-hepek_output/
-
-
-
-
-
+**/.deder/**
+!**/.deder/server.properties
 
