@@ -448,9 +448,9 @@ class SourceMerger(
     case Term.Super(thisp, superp) =>
       s"super(${thisp.value}.${superp.value})"
     case Term.Tuple(values) =>
-      s"tuple$arity=${values.size}"
+      s"tupleArity=${values.size}"
     case Term.Block(stats) =>
-      s"block$arity=${stats.size}"
+      s"blockArity=${stats.size}"
     case other =>
       other.productPrefix
   }
@@ -470,8 +470,8 @@ class SourceMerger(
     val grouped = values.groupBy(key)
     val ambiguousKeys = grouped.collect { case (k, v) if v.size > 1 => k }.toList.sorted
     if (ambiguousKeys.nonEmpty) {
-      println(
-        s"[regenesca] Ambiguous merge keys for $what; skipping keys: ${ambiguousKeys.mkString(", ")}"
+      throw new IllegalArgumentException(
+        s"[regenesca] Ambiguous merge keys for $what: ${ambiguousKeys.mkString(", ")}"
       )
     }
     grouped.collect { case (k, v) if v.size == 1 => k -> v.head }.toMap
