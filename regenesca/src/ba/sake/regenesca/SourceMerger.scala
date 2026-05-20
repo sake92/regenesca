@@ -8,7 +8,16 @@ import scalafix.internal.patch._
 import scala.annotation.tailrec
 import scala.meta.Stat.Block
 
-class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
+sealed trait ForComprehensionMergeStrategy
+object ForComprehensionMergeStrategy {
+  case object PreserveUserExpressions extends ForComprehensionMergeStrategy
+  case object OverwriteComprehensionFully extends ForComprehensionMergeStrategy
+}
+
+class SourceMerger(
+    mergeDefBodies: Boolean,
+    forComprehensionMergeStrategy: ForComprehensionMergeStrategy
+)(implicit dialect: Dialect) {
 
   def merge(originalSource: Source, overwriteSource: Source): String =
     if (originalSource.stats.isEmpty) {
@@ -57,8 +66,9 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
       }
       .toMap
     val overwritingDefsMap = overwritingStats.collect { case d2: Defn.Def =>
-      d2.name.value -> d2
-    }.toMap
+      d2
+    }
+    val overwritingDefsBySignatureMap = toUniqueMap(overwritingDefsMap, defSignatureKey, "def signatures")
     val overwritingEnumsMap = overwritingStats.collect { case e2: Defn.Enum =>
       e2.name.value -> e2
     }.toMap
@@ -127,7 +137,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
             List.empty
         }
       case d1: Defn.Def =>
-        overwritingDefsMap.get(d1.name.value) match {
+        overwritingDefsBySignatureMap.get(defSignatureKey(d1)) match {
           case Some(d2) =>
             usedOverwritingStats += d2
             if (mergeDefBodies) {
@@ -350,9 +360,122 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         patchTerms(origSourceLastToken, hasBody, Term.Block(List(t1)), t2)
       case (t1: Term.PartialFunction, t2: Term.PartialFunction) =>
         patchCases(origSourceLastToken, hasBody, t1.cases, t2.cases)
+      case (t1: Term.For, t2: Term.For) =>
+        forComprehensionMergeStrategy match {
+          case ForComprehensionMergeStrategy.OverwriteComprehensionFully =>
+            Option.when(t1.structure != t2.structure)(Patch.replaceTree(t1, t2.syntax)).toList
+          case ForComprehensionMergeStrategy.PreserveUserExpressions =>
+            val merged = mergeForTerm(t1, t2)
+            Option.when(merged.structure != t1.structure)(Patch.replaceTree(t1, merged.syntax)).toList
+        }
+      case (t1: Term.ForYield, t2: Term.ForYield) =>
+        forComprehensionMergeStrategy match {
+          case ForComprehensionMergeStrategy.OverwriteComprehensionFully =>
+            Option.when(t1.structure != t2.structure)(Patch.replaceTree(t1, t2.syntax)).toList
+          case ForComprehensionMergeStrategy.PreserveUserExpressions =>
+            val merged = mergeForYieldTerm(t1, t2)
+            Option.when(merged.structure != t1.structure)(Patch.replaceTree(t1, merged.syntax)).toList
+        }
       case _ =>
         List.empty
     }
+
+  private def mergeForTerm(original: Term.For, generated: Term.For): Term.For = {
+    val mergedEnums = mergeEnumerators(original.enums, generated.enums)
+    val mergedBody = mergeForBodyTerm(original.body, generated.body)
+    original.copy(enums = mergedEnums, body = mergedBody)
+  }
+
+  private def mergeForYieldTerm(original: Term.ForYield, generated: Term.ForYield): Term.ForYield = {
+    val mergedEnums = mergeEnumerators(original.enums, generated.enums)
+    val mergedBody = mergeForBodyTerm(original.body, generated.body)
+    original.copy(enums = mergedEnums, body = mergedBody)
+  }
+
+  private def mergeForBodyTerm(original: Term, generated: Term): Term =
+    (original, generated) match {
+      case (o: Term.For, g: Term.For) =>
+        mergeForTerm(o, g)
+      case (o: Term.ForYield, g: Term.ForYield) =>
+        mergeForYieldTerm(o, g)
+      case _ =>
+        // preserve existing user expression by default
+        original
+    }
+
+  private def mergeEnumerators(originalEnums: List[Enumerator], generatedEnums: List[Enumerator]): List[Enumerator] = {
+    val generatedByKey = toUniqueMap(generatedEnums, enumeratorMergeKey, "for-comprehension qualifiers")
+    var usedGeneratedKeys: Set[String] = Set.empty
+    val mergedExisting = originalEnums.map { enum =>
+      val key = enumeratorMergeKey(enum)
+      generatedByKey.get(key) match {
+        case Some(generatedEnum) if !usedGeneratedKeys.contains(key) =>
+          usedGeneratedKeys += key
+          generatedEnum
+        case _ =>
+          enum
+      }
+    }
+    val newGenerated = generatedEnums.filter { enum =>
+      val key = enumeratorMergeKey(enum)
+      generatedByKey.contains(key) && !usedGeneratedKeys.contains(key)
+    }
+    mergedExisting ++ newGenerated
+  }
+
+  private def enumeratorMergeKey(enum: Enumerator): String = enum match {
+    case Enumerator.Generator(pat, rhs) =>
+      s"gen:${pat.structure}:${termShape(rhs)}"
+    case Enumerator.Val(pat, rhs) =>
+      s"val:${pat.structure}:${termShape(rhs)}"
+    case Enumerator.Guard(cond) =>
+      s"guard:${termShape(cond)}"
+    case other =>
+      s"${other.productPrefix}:${other.structure}"
+  }
+
+  private def termShape(term: Term): String = term match {
+    case Term.Apply(fun, _) =>
+      s"apply(${termShape(fun)})"
+    case Term.ApplyType(fun, _) =>
+      s"applyType(${termShape(fun)})"
+    case Term.Select(qual, name) =>
+      s"select(${termShape(qual)}.${name.value})"
+    case Term.Name(name) =>
+      s"name($name)"
+    case Term.This(qual) =>
+      s"this(${qual.value})"
+    case Term.Super(thisp, superp) =>
+      s"super(${thisp.value}.${superp.value})"
+    case Term.Tuple(values) =>
+      s"tuple$arity=${values.size}"
+    case Term.Block(stats) =>
+      s"block$arity=${stats.size}"
+    case other =>
+      other.productPrefix
+  }
+
+  private def defSignatureKey(d: Defn.Def): String =
+    d.body.tokens.headOption match {
+      case Some(bodyFirstToken) =>
+        d.tokens
+          .takeWhile(_.pos.start < bodyFirstToken.pos.start)
+          .map(_.text)
+          .mkString("")
+      case None =>
+        d.name.value
+    }
+
+  private def toUniqueMap[T](values: List[T], key: T => String, what: String): Map[String, T] = {
+    val grouped = values.groupBy(key)
+    val ambiguousKeys = grouped.collect { case (k, v) if v.size > 1 => k }.toList.sorted
+    if (ambiguousKeys.nonEmpty) {
+      println(
+        s"[regenesca] Ambiguous merge keys for $what; skipping keys: ${ambiguousKeys.mkString(", ")}"
+      )
+    }
+    grouped.collect { case (k, v) if v.size == 1 => k -> v.head }.toMap
+  }
 
   private def patchCases(
       origSourceLastToken: Token,
@@ -382,6 +505,10 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
 }
 
 object SourceMerger {
-  def apply(mergeDefBodies: Boolean = true)(implicit dialect: Dialect): SourceMerger =
-    new SourceMerger(mergeDefBodies)
+  def apply(
+      mergeDefBodies: Boolean = true,
+      forComprehensionMergeStrategy: ForComprehensionMergeStrategy =
+        ForComprehensionMergeStrategy.PreserveUserExpressions
+  )(implicit dialect: Dialect): SourceMerger =
+    new SourceMerger(mergeDefBodies, forComprehensionMergeStrategy)
 }
