@@ -19,6 +19,8 @@ class SourceMerger(
     forComprehensionMergeStrategy: ForComprehensionMergeStrategy
 )(implicit dialect: Dialect) {
 
+  private val MaxDiagnosticSyntaxLength = 120
+
   def merge(originalSource: Source, overwriteSource: Source): String =
     if (originalSource.stats.isEmpty) {
       overwriteSource.syntax
@@ -418,6 +420,7 @@ class SourceMerger(
   }
 
   private def enumeratorMergeKey(enum: Enumerator): String = enum match {
+    // Prefixes separate enumerator kinds to avoid key collisions across types.
     case Enumerator.Generator(pat, rhs) =>
       s"gen:${pat.structure}:${termShape(rhs)}"
     case Enumerator.Val(pat, rhs) =>
@@ -470,7 +473,8 @@ class SourceMerger(
     val ambiguousKeys = grouped.collect { case (k, v) if v.size > 1 => k }.toList.sorted
     if (ambiguousKeys.nonEmpty) {
       val details = ambiguousKeys.map { k =>
-        val examples = grouped(k).take(2).map(_.syntax.take(120)).mkString(" | ")
+        val examples =
+          grouped(k).take(2).map(_.syntax.take(MaxDiagnosticSyntaxLength)).mkString(" | ")
         s"$k => $examples"
       }
       throw new IllegalArgumentException(
