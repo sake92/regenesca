@@ -136,7 +136,8 @@ class SourceMergerForComprehensionsSuite extends BaseSuite {
     """
     val once = sourceMerger.merge(original, generated)
     val twice = sourceMerger.merge(once.parse[Source].get, generated)
-    assertEqStructure(once, twice.parse[Source].get)
+    assertEqStructure(once, once.parse[Source].get)
+    assertEqStructure(twice, once.parse[Source].get)
   }
 
   test("should overwrite comprehension fully when configured") {

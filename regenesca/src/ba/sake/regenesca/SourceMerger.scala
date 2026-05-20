@@ -405,20 +405,14 @@ class SourceMerger(
 
   private def mergeEnumerators(originalEnums: List[Enumerator], generatedEnums: List[Enumerator]): List[Enumerator] = {
     val generatedByKey = toUniqueMap(generatedEnums, enumeratorMergeKey, "for-comprehension qualifiers")
-    var usedGeneratedKeys: Set[String] = Set.empty
     val mergedExisting = originalEnums.map { enum =>
       val key = enumeratorMergeKey(enum)
-      generatedByKey.get(key) match {
-        case Some(generatedEnum) if !usedGeneratedKeys.contains(key) =>
-          usedGeneratedKeys += key
-          generatedEnum
-        case _ =>
-          enum
-      }
+      generatedByKey.getOrElse(key, enum)
     }
+    val replacedKeys = originalEnums.map(enumeratorMergeKey).toSet.intersect(generatedByKey.keySet)
     val newGenerated = generatedEnums.filter { enum =>
       val key = enumeratorMergeKey(enum)
-      generatedByKey.contains(key) && !usedGeneratedKeys.contains(key)
+      !replacedKeys.contains(key)
     }
     mergedExisting ++ newGenerated
   }
@@ -455,6 +449,7 @@ class SourceMerger(
       other.productPrefix
   }
 
+  /** Extracts method signature tokens (before body) to distinguish overloads by full signature. */
   private def defSignatureKey(d: Defn.Def): String =
     d.body.tokens.headOption match {
       case Some(bodyFirstToken) =>
