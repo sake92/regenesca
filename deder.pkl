@@ -1,4 +1,4 @@
-amends "https://sake92.github.io/deder/config/DederProject.pkl"
+amends "https://sake92.github.io/deder/config/v0.9.1/DederProject.pkl"
 
 local const baseTemplate: ScalaModule = new {
   scalaVersion = "2.13.18"
