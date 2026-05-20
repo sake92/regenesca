@@ -186,4 +186,28 @@ class SourceMergerForComprehensionsSuite extends BaseSuite {
     val merged = sourceMerger.merge(original, generated)
     assertEqStructure(merged, expected)
   }
+
+  test("should match overloaded defs by signature when mergeDefBodies is false") {
+    val merger = SourceMerger(mergeDefBodies = false)
+    val original = source"""
+      class Api {
+        def load(id: Int): String = "old-int"
+        def load(id: String): String = "old-string"
+      }
+    """
+    val generated = source"""
+      class Api {
+        def load(id: Int): String = "new-int"
+        def load(id: String): String = "old-string"
+      }
+    """
+    val expected = source"""
+      class Api {
+        def load(id: Int): String = "new-int"
+        def load(id: String): String = "old-string"
+      }
+    """
+    val merged = merger.merge(original, generated)
+    assertEqStructure(merged, expected)
+  }
 }

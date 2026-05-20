@@ -461,12 +461,20 @@ class SourceMerger(
         d.name.value
     }
 
-  private def toUniqueMap[T](values: List[T], key: T => String, what: String): Map[String, T] = {
+  private def toUniqueMap[T <: Tree](
+      values: List[T],
+      key: T => String,
+      elementDescription: String
+  ): Map[String, T] = {
     val grouped = values.groupBy(key)
     val ambiguousKeys = grouped.collect { case (k, v) if v.size > 1 => k }.toList.sorted
     if (ambiguousKeys.nonEmpty) {
+      val details = ambiguousKeys.map { k =>
+        val examples = grouped(k).take(2).map(_.syntax.take(120)).mkString(" | ")
+        s"$k => $examples"
+      }
       throw new IllegalArgumentException(
-        s"[regenesca] Ambiguous merge keys for $what: ${ambiguousKeys.mkString(", ")}"
+        s"[regenesca] Ambiguous merge keys for $elementDescription: ${details.mkString("; ")}"
       )
     }
     grouped.collect { case (k, v) if v.size == 1 => k -> v.head }.toMap
