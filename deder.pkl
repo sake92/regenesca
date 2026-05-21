@@ -5,49 +5,50 @@ local const baseTemplate: ScalaModule = new {
   publish = false
 }
 
-local const regenesca: CreateScalaModules = new {
-  _root = "regenesca"
-  _template = (baseTemplate) {
-    deps {
-      "ch.epfl.scala::scalafix-core:0.14.2"
-    }
-    publish = true
-    pomSettings {
-      groupId = "ba.sake"
-      artifactId = "regenesca"
-      name = "Regenesca library"
-      description = "Regenesca library - Refactoring Generator of Source Code for Scala"
-      url = "https://github.com/sake92/regenesca"
-      licenses {
-        new PomLicense {
-          name = "Apache 2.0 License"
-          url = "https://opensource.org/license/apache-2.0"
+local const regenescaModules =
+  new CreateScalaModules {
+    root = "regenesca"
+    template = (baseTemplate) {
+      deps {
+        "ch.epfl.scala::scalafix-core:0.14.2"
+      }
+      publish = true
+      pomSettings {
+        groupId = "ba.sake"
+        artifactId = "regenesca"
+        name = "Regenesca library"
+        description = "Regenesca library - Refactoring Generator of Source Code for Scala"
+        url = "https://github.com/sake92/regenesca"
+        licenses {
+          new PomLicense {
+            name = "Apache 2.0 License"
+            url = "https://opensource.org/license/apache-2.0"
+          }
+        }
+        developers {
+          new PomDeveloper {
+            id = "sake92"
+            name = "Sakib Hadžiavdić"
+            email = "sake92@sake.ba"
+          }
+        }
+        scm {
+          url = "git@github.com:sake92/regenesca.git"
         }
       }
-      developers {
-        new PomDeveloper {
-          id = "sake92"
-          name = "Sakib Hadžiavdić"
-          email = "sake92@sake.ba"
-        }
-      }
-      scm {
-        url = "git@github.com:sake92/regenesca.git"
+    }
+    testTemplate = (baseTemplate.asTest()) {
+      deps {
+        "org.scalameta::munit:1.0.1"
       }
     }
-  }
-  _testTemplate = (baseTemplate.asTest()) {
-    deps {
-      "org.scalameta::munit:1.0.1"
-    }
-  }
-}
+  }.get
 
 local const hello: ScalaModule = (baseTemplate) {
   id = "helloExample"
   root = "examples/hello"
   moduleDeps {
-    regenesca.get.main
+    regenescaModules.main
   }
 }
 
@@ -55,12 +56,12 @@ local const migration: ScalaModule = (baseTemplate) {
   id = "migrationExample"
   root = "examples/migration"
   moduleDeps {
-    regenesca.get.main
+    regenescaModules.main
   }
 }
 
 modules {
-  ...regenesca.get.all
+  ...regenescaModules.all
   hello
   migration
 }

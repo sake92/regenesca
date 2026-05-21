@@ -8,7 +8,18 @@ import scalafix.internal.patch._
 import scala.annotation.tailrec
 import scala.meta.Stat.Block
 
-class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
+sealed trait ForComprehensionMergeStrategy
+object ForComprehensionMergeStrategy {
+  case object PreserveUserExpressions extends ForComprehensionMergeStrategy
+  case object OverwriteComprehensionFully extends ForComprehensionMergeStrategy
+}
+
+class SourceMerger(
+    mergeDefBodies: Boolean,
+    forComprehensionMergeStrategy: ForComprehensionMergeStrategy
+)(implicit dialect: Dialect) {
+
+  private val MaxDiagnosticSyntaxLength = 120
 
   def merge(originalSource: Source, overwriteSource: Source): String =
     if (originalSource.stats.isEmpty) {
@@ -57,8 +68,9 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
       }
       .toMap
     val overwritingDefsMap = overwritingStats.collect { case d2: Defn.Def =>
-      d2.name.value -> d2
-    }.toMap
+      d2
+    }
+    val overwritingDefsBySignatureMap = toUniqueMap(overwritingDefsMap, defSignatureKey, "def signatures")
     val overwritingEnumsMap = overwritingStats.collect { case e2: Defn.Enum =>
       e2.name.value -> e2
     }.toMap
@@ -127,7 +139,7 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
             List.empty
         }
       case d1: Defn.Def =>
-        overwritingDefsMap.get(d1.name.value) match {
+        overwritingDefsBySignatureMap.get(defSignatureKey(d1)) match {
           case Some(d2) =>
             usedOverwritingStats += d2
             if (mergeDefBodies) {
@@ -330,15 +342,11 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
   ): List[Patch] =
     (originalTerm, overwriteTerm) match {
       case (t1: Term.Block, t2: Term.Block) =>
-        patchStats(origSourceLastToken, hasBody, t1.stats, t2.stats, appendNewDefinitions = false)
+        mergeBlockTerms(origSourceLastToken, hasBody, t1, t2)
       case (t1: Term.Apply, t2: Term.Apply) =>
-        if ( // only handling one-arg functions...
-          t1.args.length == 1 && t2.args.length == 1 &&
-          t1.fun.isInstanceOf[Term.Name] &&
-          t2.fun.isInstanceOf[Term.Name] &&
-          t1.fun.asInstanceOf[Term.Name].value ==
-            t2.fun.asInstanceOf[Term.Name].value
-        ) {
+        // Recurse into single-arg function applications when fun structures match
+        // (handles both simple names like Response.withBody(...) and complex funs like HttpRoutes.of[IO](...))
+        if (t1.args.length == 1 && t2.args.length == 1 && t1.fun.structure == t2.fun.structure) {
           patchTerms(origSourceLastToken, hasBody, t1.argClause.values.head, t2.argClause.values.head)
         } else {
           List.empty
@@ -350,9 +358,185 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
         patchTerms(origSourceLastToken, hasBody, Term.Block(List(t1)), t2)
       case (t1: Term.PartialFunction, t2: Term.PartialFunction) =>
         patchCases(origSourceLastToken, hasBody, t1.cases, t2.cases)
+      case (t1: Term.For, t2: Term.For) =>
+        forComprehensionMergeStrategy match {
+          case ForComprehensionMergeStrategy.OverwriteComprehensionFully =>
+            Option.when(t1.structure != t2.structure)(Patch.replaceTree(t1, t2.syntax)).toList
+          case ForComprehensionMergeStrategy.PreserveUserExpressions =>
+            val merged = mergeForTerm(t1, t2)
+            Option.when(merged.structure != t1.structure)(Patch.replaceTree(t1, merged.syntax)).toList
+        }
+      case (t1: Term.ForYield, t2: Term.ForYield) =>
+        forComprehensionMergeStrategy match {
+          case ForComprehensionMergeStrategy.OverwriteComprehensionFully =>
+            Option.when(t1.structure != t2.structure)(Patch.replaceTree(t1, t2.syntax)).toList
+          case ForComprehensionMergeStrategy.PreserveUserExpressions =>
+            val merged = mergeForYieldTerm(t1, t2)
+            Option.when(merged.structure != t1.structure)(Patch.replaceTree(t1, merged.syntax)).toList
+        }
       case _ =>
         List.empty
     }
+
+  /* Merge block contents: dispatch structural terms (ForYield, For, PartialFunction, Block) to
+   * patchTerms, and def-level stats (Val, Def, etc.) to patchStats.
+   * Terms are matched positionally; new generated structural terms are appended. */
+  private def mergeBlockTerms(
+      origSourceLastToken: Token,
+      hasBody: Boolean,
+      originalBlock: Term.Block,
+      generatedBlock: Term.Block
+  ): List[Patch] = {
+    // Terms that have meaningful merge semantics (vs. leaf expressions like Term.Apply)
+    def isStructuralTerm(s: Stat): Boolean = s match {
+      case _: Term.For | _: Term.ForYield | _: Term.PartialFunction | _: Term.Block => true
+      case _ => false
+    }
+    val (origTerms, origDefs) = originalBlock.stats.partition(isStructuralTerm)
+    val (genTerms, genDefs) = generatedBlock.stats.partition(isStructuralTerm)
+
+    // Positional matching for structural terms
+    val termPatches = List.newBuilder[Patch]
+    val matchedGenTerms = Set.newBuilder[Stat]
+    origTerms.foreach { origTerm =>
+      genTerms.find(gt => !matchedGenTerms.result().contains(gt)) match {
+        case Some(genTerm) =>
+          matchedGenTerms += genTerm
+          termPatches ++= patchTerms(origSourceLastToken, hasBody, origTerm.asInstanceOf[Term], genTerm.asInstanceOf[Term])
+        case None =>
+        // leave unchanged
+      }
+    }
+
+    // Append new unmatched structural terms after last original term (or last original stat)
+    val unmatchedGenTerms = genTerms.filterNot(matchedGenTerms.result())
+    if (unmatchedGenTerms.nonEmpty) {
+      val insertionPoint = origTerms.lastOption.orElse(originalBlock.stats.lastOption)
+      insertionPoint.foreach { ref =>
+        unmatchedGenTerms.foreach { term =>
+          val indented = StringUtils.indent(term.syntax, ref.pos.startColumn)
+          termPatches += Patch.addRight(ref, "\n" + indented)
+        }
+      }
+    }
+
+    // Def-level stats (Val, Def, Import, Class, etc.) handled via patchStats
+    val defPatches = patchStats(origSourceLastToken, hasBody, origDefs, genDefs, appendNewDefinitions = false)
+
+    termPatches.result() ++ defPatches
+  }
+
+  private def mergeForTerm(original: Term.For, generated: Term.For): Term.For = {
+    val mergedEnums = mergeEnumerators(original.enums, generated.enums)
+    val mergedBody = mergeForBodyTerm(original.body, generated.body)
+    original.copy(enums = mergedEnums, body = mergedBody)
+  }
+
+  private def mergeForYieldTerm(original: Term.ForYield, generated: Term.ForYield): Term.ForYield = {
+    val mergedEnums = mergeEnumerators(original.enums, generated.enums)
+    val mergedBody = mergeForBodyTerm(original.body, generated.body)
+    original.copy(enums = mergedEnums, body = mergedBody)
+  }
+
+  private def mergeForBodyTerm(original: Term, generated: Term): Term =
+    (original, generated) match {
+      case (o: Term.For, g: Term.For) =>
+        mergeForTerm(o, g)
+      case (o: Term.ForYield, g: Term.ForYield) =>
+        mergeForYieldTerm(o, g)
+      case (o: Term.Block, g: Term.Block) =>
+        // Unwrap single-statement blocks containing for-comprehensions (e.g. yield { for { ... } yield expr })
+        (o.stats.headOption, g.stats.headOption) match {
+          case (Some(os: Term), Some(gs: Term)) if o.stats.size == 1 && g.stats.size == 1 =>
+            val merged = mergeForBodyTerm(os, gs)
+            Term.Block(List(merged))
+          case _ =>
+            // Multi-statement blocks: preserve user expression
+            original
+        }
+      case _ =>
+        // preserve existing user expression by default
+        original
+    }
+
+  private def mergeEnumerators(originalEnums: List[Enumerator], generatedEnums: List[Enumerator]): List[Enumerator] = {
+    val generatedByKey = toUniqueMap(generatedEnums, enumeratorMergeKey, "for-comprehension qualifiers")
+    val mergedExisting = originalEnums.map { enum =>
+      val key = enumeratorMergeKey(enum)
+      generatedByKey.getOrElse(key, enum)
+    }
+    val replacedKeys = originalEnums.map(enumeratorMergeKey).toSet.intersect(generatedByKey.keySet)
+    val newGenerated = generatedEnums.filter { enum =>
+      val key = enumeratorMergeKey(enum)
+      !replacedKeys.contains(key)
+    }
+    mergedExisting ++ newGenerated
+  }
+
+  private def enumeratorMergeKey(enum: Enumerator): String = enum match {
+    // Prefixes separate enumerator kinds to avoid key collisions across types.
+    case Enumerator.Generator(pat, rhs) =>
+      s"gen:${pat.structure}:${termShape(rhs)}"
+    case Enumerator.Val(pat, rhs) =>
+      s"val:${pat.structure}:${termShape(rhs)}"
+    case Enumerator.Guard(cond) =>
+      s"guard:${termShape(cond)}"
+    case other =>
+      s"${other.productPrefix}:${other.structure}"
+  }
+
+  private def termShape(term: Term): String = term match {
+    case Term.Apply(fun, _) =>
+      s"apply(${termShape(fun)})"
+    case Term.ApplyType(fun, _) =>
+      s"applyType(${termShape(fun)})"
+    case Term.Select(qual, name) =>
+      s"select(${termShape(qual)}.${name.value})"
+    case Term.Name(name) =>
+      s"name($name)"
+    case Term.This(qual) =>
+      s"this(${qual.value})"
+    case Term.Super(thisp, superp) =>
+      s"super(${thisp.value}.${superp.value})"
+    case Term.Tuple(values) =>
+      s"tupleArity=${values.size}"
+    case Term.Block(stats) =>
+      s"blockArity=${stats.size}"
+    case other =>
+      other.productPrefix
+  }
+
+  /** Extracts method signature tokens (before body) to distinguish overloads by full signature. */
+  private def defSignatureKey(d: Defn.Def): String =
+    d.body.tokens.headOption match {
+      case Some(bodyFirstToken) =>
+        d.tokens
+          .takeWhile(_.pos.start < bodyFirstToken.pos.start)
+          .map(_.text)
+          .mkString("")
+      case None =>
+        d.name.value
+    }
+
+  private def toUniqueMap[T <: Tree](
+      values: List[T],
+      key: T => String,
+      elementDescription: String
+  ): Map[String, T] = {
+    val grouped = values.groupBy(key)
+    val ambiguousKeys = grouped.collect { case (k, v) if v.size > 1 => k }.toList.sorted
+    if (ambiguousKeys.nonEmpty) {
+      val details = ambiguousKeys.map { k =>
+        val examples =
+          grouped(k).take(2).map(_.syntax.take(MaxDiagnosticSyntaxLength)).mkString(" | ")
+        s"$k => $examples"
+      }
+      throw new IllegalArgumentException(
+        s"[regenesca] Ambiguous merge keys for $elementDescription: ${details.mkString("; ")}"
+      )
+    }
+    grouped.collect { case (k, v) if v.size == 1 => k -> v.head }.toMap
+  }
 
   private def patchCases(
       origSourceLastToken: Token,
@@ -382,6 +566,10 @@ class SourceMerger(mergeDefBodies: Boolean)(implicit dialect: Dialect) {
 }
 
 object SourceMerger {
-  def apply(mergeDefBodies: Boolean = true)(implicit dialect: Dialect): SourceMerger =
-    new SourceMerger(mergeDefBodies)
+  def apply(
+      mergeDefBodies: Boolean = true,
+      forComprehensionMergeStrategy: ForComprehensionMergeStrategy =
+        ForComprehensionMergeStrategy.PreserveUserExpressions
+  )(implicit dialect: Dialect): SourceMerger =
+    new SourceMerger(mergeDefBodies, forComprehensionMergeStrategy)
 }
