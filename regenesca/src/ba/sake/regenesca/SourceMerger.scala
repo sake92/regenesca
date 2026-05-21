@@ -51,49 +51,55 @@ class SourceMerger(
     val overwritingImports = overwritingStats.collect { case i2: Import =>
       i2
     }
-    val overwritingValsMap = overwritingStats
-      .collect { case v2: Defn.Val => v2 }
-      .flatMap { v =>
-        v.pats.headOption.collect { case p: Pat.Var =>
-          p.name.value -> v
-        }
-      }
-      .toMap
-    val overwritingVarsMap = overwritingStats
-      .collect { case v2: Defn.Var => v2 }
-      .flatMap { v =>
-        v.pats.headOption.collect { case p: Pat.Var =>
-          p.name.value -> v
-        }
-      }
-      .toMap
+    val overwritingValsMap = toUniqueKeyedMap(
+      overwritingStats.collect { case v2: Defn.Val => v2 },
+      v => valVarPatKeys(v.pats),
+      "val names/patterns"
+    )
+    val overwritingVarsMap = toUniqueKeyedMap(
+      overwritingStats.collect { case v2: Defn.Var => v2 },
+      v => valVarPatKeys(v.pats),
+      "var names/patterns"
+    )
     val overwritingDefsMap = overwritingStats.collect { case d2: Defn.Def =>
       d2
     }
     val overwritingDefsBySignatureMap = toUniqueMap(overwritingDefsMap, defSignatureKey, "def signatures")
-    val overwritingEnumsMap = overwritingStats.collect { case e2: Defn.Enum =>
-      e2.name.value -> e2
-    }.toMap
-    val overwritingClassesMap = overwritingStats.collect { case c2: Defn.Class =>
-      c2.name.value -> c2
-    }.toMap
-    val overwritingTraitsMap = overwritingStats.collect { case t2: Defn.Trait =>
-      t2.name.value -> t2
-    }.toMap
-    val overwritingObjectsMap = overwritingStats.collect { case o2: Defn.Object =>
-      o2.name.value -> o2
-    }.toMap
-    val overwritingTypesMap = overwritingStats.collect { case t2: Defn.Type =>
-      t2.name.value -> t2
-    }.toMap
-    val overwritingGivensMap = overwritingStats.collect { case g2: Defn.Given =>
-      // try to encode a "name" for anonymous givens...
-      val key = g2.name + g2.templ.inits.map(_.structure).mkString("-")
-      key -> g2
-    }.toMap
-    val overwritingGivenAliasesMap = overwritingStats.collect { case g2: Defn.GivenAlias =>
-      g2.decltpe.structure -> g2
-    }.toMap
+    val overwritingEnumsMap = toUniqueMap(
+      overwritingStats.collect { case e2: Defn.Enum => e2 },
+      _.name.value,
+      "enum names"
+    )
+    val overwritingClassesMap = toUniqueMap(
+      overwritingStats.collect { case c2: Defn.Class => c2 },
+      _.name.value,
+      "class names"
+    )
+    val overwritingTraitsMap = toUniqueMap(
+      overwritingStats.collect { case t2: Defn.Trait => t2 },
+      _.name.value,
+      "trait names"
+    )
+    val overwritingObjectsMap = toUniqueMap(
+      overwritingStats.collect { case o2: Defn.Object => o2 },
+      _.name.value,
+      "object names"
+    )
+    val overwritingTypesMap = toUniqueMap(
+      overwritingStats.collect { case t2: Defn.Type => t2 },
+      _.name.value,
+      "type names"
+    )
+    val overwritingGivensMap = toUniqueMap(
+      overwritingStats.collect { case g2: Defn.Given => g2 },
+      givenMergeKey,
+      "given definitions"
+    )
+    val overwritingGivenAliasesMap = toUniqueMap(
+      overwritingStats.collect { case g2: Defn.GivenAlias => g2 },
+      _.decltpe.structure,
+      "given aliases"
+    )
 
     /* do the merging */
     val patchesList: List[Patch] = originalStats.flatMap {
@@ -113,12 +119,7 @@ class SourceMerger(
           case None => List.empty
         }
       case v1: Defn.Val =>
-        val v1Name = v1.pats.headOption
-          .collect { case p: Pat.Var =>
-            p.name.value
-          }
-          .getOrElse("")
-        overwritingValsMap.get(v1Name) match {
+        findByAnyKey(overwritingValsMap, valVarPatKeys(v1.pats), "original val names/patterns") match {
           case Some(v2) =>
             usedOverwritingStats += v2
             Option.when(v1.structure != v2.structure)(Patch.replaceTree(v1, v2.syntax)).toList
@@ -126,12 +127,7 @@ class SourceMerger(
             List.empty
         }
       case v1: Defn.Var =>
-        val v1Name = v1.pats.headOption
-          .collect { case p: Pat.Var =>
-            p.name.value
-          }
-          .getOrElse("")
-        overwritingVarsMap.get(v1Name) match {
+        findByAnyKey(overwritingVarsMap, valVarPatKeys(v1.pats), "original var names/patterns") match {
           case Some(v2) =>
             usedOverwritingStats += v2
             Option.when(v1.structure != v2.structure)(Patch.replaceTree(v1, v2.syntax)).toList
@@ -236,9 +232,7 @@ class SourceMerger(
             List.empty
         }
       case g1: Defn.Given =>
-        // try to encode a "name" for anonymous givens...
-        val key = g1.name + g1.templ.inits.map(_.structure).mkString("-")
-        overwritingGivensMap.get(key) match {
+        overwritingGivensMap.get(givenMergeKey(g1)) match {
           case Some(g2) =>
             usedOverwritingStats += g2
             Option.when(g1.structure != g2.structure)(Patch.replaceTree(g1, g2.syntax)).toList
@@ -395,21 +389,26 @@ class SourceMerger(
     val (origTerms, origDefs) = originalBlock.stats.partition(isStructuralTerm)
     val (genTerms, genDefs) = generatedBlock.stats.partition(isStructuralTerm)
 
-    // Positional matching for structural terms
+    val origTermTrees = origTerms.collect { case t: Term => t }
+    val genTermTrees = genTerms.collect { case t: Term => t }
+    val generatedTermByKey = toUniqueMap(genTermTrees, structuralTermMergeKey, "structural block terms")
+
+    // Key-based matching for structural terms
     val termPatches = List.newBuilder[Patch]
-    val matchedGenTerms = Set.newBuilder[Stat]
-    origTerms.foreach { origTerm =>
-      genTerms.find(gt => !matchedGenTerms.result().contains(gt)) match {
+    val matchedGenTermKeys = scala.collection.mutable.Set.empty[String]
+    origTermTrees.foreach { origTerm =>
+      val key = structuralTermMergeKey(origTerm)
+      generatedTermByKey.get(key) match {
         case Some(genTerm) =>
-          matchedGenTerms += genTerm
-          termPatches ++= patchTerms(origSourceLastToken, hasBody, origTerm.asInstanceOf[Term], genTerm.asInstanceOf[Term])
+          matchedGenTermKeys += key
+          termPatches ++= patchTerms(origSourceLastToken, hasBody, origTerm, genTerm)
         case None =>
         // leave unchanged
       }
     }
 
     // Append new unmatched structural terms after last original term (or last original stat)
-    val unmatchedGenTerms = genTerms.filterNot(matchedGenTerms.result())
+    val unmatchedGenTerms = genTermTrees.filterNot(t => matchedGenTermKeys.contains(structuralTermMergeKey(t)))
     if (unmatchedGenTerms.nonEmpty) {
       val insertionPoint = origTerms.lastOption.orElse(originalBlock.stats.lastOption)
       insertionPoint.foreach { ref =>
@@ -502,8 +501,24 @@ class SourceMerger(
       s"tupleArity=${values.size}"
     case Term.Block(stats) =>
       s"blockArity=${stats.size}"
+    case f: Term.For =>
+      s"for(${f.enums.map(enumeratorMergeKey).mkString("|")})"
+    case f: Term.ForYield =>
+      s"forYield(${f.enums.map(enumeratorMergeKey).mkString("|")})"
+    case pf: Term.PartialFunction =>
+      s"partialFunction(${pf.cases.map(caseMergeKey).mkString("|")})"
     case other =>
       other.productPrefix
+  }
+
+  private def structuralTermMergeKey(term: Term): String = term match {
+    case _: Term.For | _: Term.ForYield | _: Term.PartialFunction =>
+      termShape(term)
+    case b: Term.Block =>
+      val head = b.stats.collectFirst { case t: Term => termShape(t) }.getOrElse("empty")
+      s"block:${b.stats.size}:$head"
+    case other =>
+      s"${other.productPrefix}:${termShape(other)}"
   }
 
   /** Extracts method signature tokens (before body) to distinguish overloads by full signature. */
@@ -545,16 +560,71 @@ class SourceMerger(
       overwritingCases: List[Case]
   ): List[Patch] = {
     var usedOverwritingCases: Set[Case] = Set.empty
-    val overwritingCasesMap = overwritingCases.map { c2 =>
-      c2.pat.structure -> c2
-    }.toMap
+    val overwritingCasesMap = toUniqueMap(overwritingCases, caseMergeKey, "case branches")
     val overwritePatches: List[Patch] = originalCases.flatMap { c1 =>
-      overwritingCasesMap.get(c1.pat.structure) match {
+      overwritingCasesMap.get(caseMergeKey(c1)) match {
         case Some(c2) =>
           usedOverwritingCases += c2
           patchTerms(origSourceLastToken, hasBody, c1.body, c2.body)
         case None =>
           List.empty
+      }
+
+      private def caseMergeKey(c: Case): String =
+        s"${c.pat.structure}|guard=${c.cond.map(termShape).getOrElse("_")}|body=${termShape(c.body)}"
+
+      private def givenMergeKey(g: Defn.Given): String =
+        s"${g.name}|${g.templ.inits.map(_.structure).mkString("-")}"
+
+      private def valVarPatKeys(pats: List[Pat]): List[String] =
+        pats.flatMap(patVarKeys).distinct
+
+      private def patVarKeys(pat: Pat): List[String] = pat match {
+        case Pat.Var(name) => List(name.value)
+        case Pat.Bind(lhs, rhs) => patVarKeys(lhs) ++ patVarKeys(rhs)
+        case Pat.Alternative(lhs, rhs) => patVarKeys(lhs) ++ patVarKeys(rhs)
+        case Pat.Tuple(args) => args.flatMap(patVarKeys)
+        case Pat.Extract(_, args) => args.flatMap(patVarKeys)
+        case Pat.ExtractInfix(lhs, _, rhs) => patVarKeys(lhs) ++ rhs.flatMap(patVarKeys)
+        case Pat.Interpolate(_, args) => args.flatMap(patVarKeys)
+        case Pat.Typed(lhs, _) => patVarKeys(lhs)
+        case Pat.Repeated(lhs) => patVarKeys(lhs)
+        case _ => List.empty
+      }
+
+      private def toUniqueKeyedMap[T <: Tree](
+          values: List[T],
+          keys: T => List[String],
+          elementDescription: String
+      ): Map[String, T] = {
+        val keyedValues = values.flatMap(v => keys(v).distinct.map(_ -> v))
+        val grouped = keyedValues.groupBy(_._1).view.mapValues(_.map(_._2)).toMap
+        val ambiguousKeys =
+          grouped.collect { case (k, vs) if vs.map(_.structure).distinct.size > 1 => k }.toList.sorted
+        if (ambiguousKeys.nonEmpty) {
+          val details = ambiguousKeys.map { k =>
+            val examples = grouped(k).distinct.take(2).map(_.syntax.take(MaxDiagnosticSyntaxLength)).mkString(" | ")
+            s"$k => $examples"
+          }
+          throw new IllegalArgumentException(
+            s"[regenesca] Ambiguous merge keys for $elementDescription: ${details.mkString("; ")}"
+          )
+        }
+        grouped.collect { case (k, vs) if vs.nonEmpty => k -> vs.head }.toMap
+      }
+
+      private def findByAnyKey[T](
+          valuesByKey: Map[String, T],
+          keys: List[String],
+          keyDescription: String
+      ): Option[T] = {
+        val matches = keys.flatMap(valuesByKey.get).distinct
+        if (matches.size > 1) {
+          throw new IllegalArgumentException(
+            s"[regenesca] Ambiguous merge key lookup for $keyDescription: ${keys.mkString(", ")}"
+          )
+        }
+        matches.headOption
       }
     }
     val newCases = overwritingCases.filterNot(usedOverwritingCases)

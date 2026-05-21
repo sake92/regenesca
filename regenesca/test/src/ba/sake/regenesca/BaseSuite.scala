@@ -10,7 +10,7 @@ trait BaseSuite extends munit.FunSuite {
       println("*" * 50)
       println(obtained)
     }
-    val obtainedSource = obtained.parse[Source].get
+    val obtainedSource = ParseUtils.parseSourceOrThrow(Input.String(obtained), "assertEqStructure obtained")
     assertEquals(obtainedSource.structure, expected.structure, obtained)
   }
 }
