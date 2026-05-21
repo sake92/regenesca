@@ -6,8 +6,8 @@ local const baseTemplate: ScalaModule = new {
 }
 
 local const regenesca: CreateScalaModules = new {
-  _root = "regenesca"
-  _template = (baseTemplate) {
+  root = "regenesca"
+  template = (baseTemplate) {
     deps {
       "ch.epfl.scala::scalafix-core:0.14.2"
     }
@@ -36,7 +36,7 @@ local const regenesca: CreateScalaModules = new {
       }
     }
   }
-  _testTemplate = (baseTemplate.asTest()) {
+  testTemplate = (baseTemplate.asTest()) {
     deps {
       "org.scalameta::munit:1.0.1"
     }
