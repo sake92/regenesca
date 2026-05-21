@@ -342,15 +342,11 @@ class SourceMerger(
   ): List[Patch] =
     (originalTerm, overwriteTerm) match {
       case (t1: Term.Block, t2: Term.Block) =>
-        patchStats(origSourceLastToken, hasBody, t1.stats, t2.stats, appendNewDefinitions = false)
+        mergeBlockTerms(origSourceLastToken, hasBody, t1, t2)
       case (t1: Term.Apply, t2: Term.Apply) =>
-        if ( // only handling one-arg functions...
-          t1.args.length == 1 && t2.args.length == 1 &&
-          t1.fun.isInstanceOf[Term.Name] &&
-          t2.fun.isInstanceOf[Term.Name] &&
-          t1.fun.asInstanceOf[Term.Name].value ==
-            t2.fun.asInstanceOf[Term.Name].value
-        ) {
+        // Recurse into single-arg function applications when fun structures match
+        // (handles both simple names like Response.withBody(...) and complex funs like HttpRoutes.of[IO](...))
+        if (t1.args.length == 1 && t2.args.length == 1 && t1.fun.structure == t2.fun.structure) {
           patchTerms(origSourceLastToken, hasBody, t1.argClause.values.head, t2.argClause.values.head)
         } else {
           List.empty
@@ -382,6 +378,54 @@ class SourceMerger(
         List.empty
     }
 
+  /* Merge block contents: dispatch structural terms (ForYield, For, PartialFunction, Block) to
+   * patchTerms, and def-level stats (Val, Def, etc.) to patchStats.
+   * Terms are matched positionally; new generated structural terms are appended. */
+  private def mergeBlockTerms(
+      origSourceLastToken: Token,
+      hasBody: Boolean,
+      originalBlock: Term.Block,
+      generatedBlock: Term.Block
+  ): List[Patch] = {
+    // Terms that have meaningful merge semantics (vs. leaf expressions like Term.Apply)
+    def isStructuralTerm(s: Stat): Boolean = s match {
+      case _: Term.For | _: Term.ForYield | _: Term.PartialFunction | _: Term.Block => true
+      case _ => false
+    }
+    val (origTerms, origDefs) = originalBlock.stats.partition(isStructuralTerm)
+    val (genTerms, genDefs) = generatedBlock.stats.partition(isStructuralTerm)
+
+    // Positional matching for structural terms
+    val termPatches = List.newBuilder[Patch]
+    val matchedGenTerms = Set.newBuilder[Stat]
+    origTerms.foreach { origTerm =>
+      genTerms.find(gt => !matchedGenTerms.result().contains(gt)) match {
+        case Some(genTerm) =>
+          matchedGenTerms += genTerm
+          termPatches ++= patchTerms(origSourceLastToken, hasBody, origTerm.asInstanceOf[Term], genTerm.asInstanceOf[Term])
+        case None =>
+        // leave unchanged
+      }
+    }
+
+    // Append new unmatched structural terms after last original term (or last original stat)
+    val unmatchedGenTerms = genTerms.filterNot(matchedGenTerms.result())
+    if (unmatchedGenTerms.nonEmpty) {
+      val insertionPoint = origTerms.lastOption.orElse(originalBlock.stats.lastOption)
+      insertionPoint.foreach { ref =>
+        unmatchedGenTerms.foreach { term =>
+          val indented = StringUtils.indent(term.syntax, ref.pos.startColumn)
+          termPatches += Patch.addRight(ref, "\n" + indented)
+        }
+      }
+    }
+
+    // Def-level stats (Val, Def, Import, Class, etc.) handled via patchStats
+    val defPatches = patchStats(origSourceLastToken, hasBody, origDefs, genDefs, appendNewDefinitions = false)
+
+    termPatches.result() ++ defPatches
+  }
+
   private def mergeForTerm(original: Term.For, generated: Term.For): Term.For = {
     val mergedEnums = mergeEnumerators(original.enums, generated.enums)
     val mergedBody = mergeForBodyTerm(original.body, generated.body)
@@ -400,6 +444,16 @@ class SourceMerger(
         mergeForTerm(o, g)
       case (o: Term.ForYield, g: Term.ForYield) =>
         mergeForYieldTerm(o, g)
+      case (o: Term.Block, g: Term.Block) =>
+        // Unwrap single-statement blocks containing for-comprehensions (e.g. yield { for { ... } yield expr })
+        (o.stats.headOption, g.stats.headOption) match {
+          case (Some(os: Term), Some(gs: Term)) if o.stats.size == 1 && g.stats.size == 1 =>
+            val merged = mergeForBodyTerm(os, gs)
+            Term.Block(List(merged))
+          case _ =>
+            // Multi-statement blocks: preserve user expression
+            original
+        }
       case _ =>
         // preserve existing user expression by default
         original

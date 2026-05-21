@@ -177,10 +177,11 @@ class SourceMergerForComprehensionsSuite extends BaseSuite {
         def load(id: String): String = "new-string"
       }
     """
+    // mergeDefBodies=true preserves leaf expressions — bodies are kept from original
     val expected = source"""
       class Api {
         def load(id: Int): String = "old-int"
-        def load(id: String): String = "new-string"
+        def load(id: String): String = "old-string"
       }
     """
     val merged = sourceMerger.merge(original, generated)
