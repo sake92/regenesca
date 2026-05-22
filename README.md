@@ -13,6 +13,8 @@ The goal is to have a *minimally intrusive* code generator.
 
 See the [examples](/examples) folder
 
+`RegenescaGenerator` also supports dry-run preview via `generatePreview(...)`, which returns merged source text and change flags without writing files.
+
 
 ## How it works?
 
@@ -34,6 +36,33 @@ The merge looks roughly as follows:
 - `case`s are merged by their patterns
 - comments are not preserved
 - it ignores expressions when merging
+
+### Supported merge behavior (currently)
+
+- **Definitions merged by key**
+  - `class`/`object`/`trait` by name
+  - `def` by full signature (supports overload-safe matching)
+  - `val`/`var` by extracted variable names from patterns
+  - `enum`/`type`/`given`/`given alias` by structural keys
+- **Case branches**
+  - merged by pattern + guard + body shape key
+- **For-comprehensions**
+  - configurable strategy:
+    - preserve user expressions while merging qualifiers (default)
+    - overwrite whole comprehension
+
+### Unsupported / intentionally conservative behavior
+
+- comments/scaladoc are not preserved
+- arbitrary expressions are generally preserved from user code (not fully rewritten)
+- deletion of stale generated members is not automatic by default
+
+### Merge strategy trade-offs
+
+- `mergeDefBodies = true` (default): minimizes user-code loss, but preserves many user expressions.
+- `mergeDefBodies = false`: stronger generator control, but can overwrite user edits inside defs.
+- `forComprehensionMergeStrategy = PreserveUserExpressions` (default): safer for manual edits.
+- `forComprehensionMergeStrategy = OverwriteComprehensionFully`: strongest regeneration, least preservation.
 
 ## Adopters
 
