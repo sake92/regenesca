@@ -1,4 +1,4 @@
-amends "https://sake92.github.io/deder/config/v0.9.1/DederProject.pkl"
+amends "https://sake92.github.io/deder/config/v0.11.1/DederProject.pkl"
 
 local const baseTemplate: ScalaModule = new {
   scalaVersion = "2.13.18"
@@ -22,7 +22,7 @@ local const regenescaModules =
         licenses {
           new PomLicense {
             name = "Apache 2.0 License"
-            url = "https://opensource.org/license/apache-2.0"
+            url = "https://www.apache.org/licenses/LICENSE-2.0"
           }
         }
         developers {
@@ -33,9 +33,11 @@ local const regenescaModules =
           }
         }
         scm {
-          url = "git@github.com:sake92/regenesca.git"
+          url = "https://github.com/sake92/regenesca"
+          connection = "scm:git:git://github.com/sake92/regenesca.git"
         }
       }
+      publishTo = new SonatypeCentralRepo { id = "sonatype" }
     }
     testTemplate = (baseTemplate.asTest()) {
       deps {
