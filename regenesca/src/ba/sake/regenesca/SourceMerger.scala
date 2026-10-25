@@ -207,7 +207,7 @@ class SourceMerger(
               else if (c1.ctor.mods.isEmpty) Patch.addLeft(c1.ctor.paramClauses.head.tokens.head, s" ${m2.syntax}")
               else Patch.addRight(c1.ctor.mods.last.tokens.last, s" ${m2.syntax}")
             }
-            mergedTemplStats ++ paramClauses ++ modsPatches
+            patchParentTypes(c1.templ, c2.templ) ++ mergedTemplStats ++ paramClauses ++ modsPatches
           case None =>
             List.empty
         }
@@ -215,7 +215,8 @@ class SourceMerger(
         overwritingTraitsMap.get(t1.name.value) match {
           case Some(t2) =>
             usedOverwritingStats += t2
-            patchStats(t1.tokens.last, t1.templ.body.tokens.nonEmpty, t1.templ.stats, t2.templ.stats)
+            patchParentTypes(t1.templ, t2.templ) ++
+              patchStats(t1.tokens.last, t1.templ.body.tokens.nonEmpty, t1.templ.stats, t2.templ.stats)
           case None =>
             List.empty
         }
@@ -223,7 +224,8 @@ class SourceMerger(
         overwritingObjectsMap.get(o1.name.value) match {
           case Some(o2) =>
             usedOverwritingStats += o2
-            patchStats(o1.tokens.last, o1.templ.body.tokens.nonEmpty, o1.templ.stats, o2.templ.stats)
+            patchParentTypes(o1.templ, o2.templ) ++
+              patchStats(o1.tokens.last, o1.templ.body.tokens.nonEmpty, o1.templ.stats, o2.templ.stats)
           case None =>
             List.empty
         }
@@ -331,6 +333,23 @@ class SourceMerger(
       }
     }
     patches.toList
+  }
+
+  private def patchParentTypes(original: Template, generated: Template): List[Patch] = {
+    def constructorKey(tpe: Type): String = tpe match {
+      case Type.Apply(constructor, _) => constructor.structure
+      case other                      => other.structure
+    }
+    val generatedParents = toUniqueMap(generated.inits, (init: Init) => constructorKey(init.tpe), "parent types")
+    original.inits.flatMap { init =>
+      generatedParents.get(constructorKey(init.tpe)).toList.flatMap { replacement =>
+        Option
+          .when(init.tpe.structure != replacement.tpe.structure)(
+            Patch.replaceTree(init.tpe, replacement.tpe.syntax)
+          )
+          .toList
+      }
+    }
   }
 
   @tailrec
@@ -461,19 +480,30 @@ class SourceMerger(
 
   private def mergeEnumerators(originalEnums: List[Enumerator], generatedEnums: List[Enumerator]): List[Enumerator] = {
     val generatedByKey = toUniqueMap(generatedEnums, enumeratorMergeKey, "for-comprehension qualifiers")
-    val mergedExisting = originalEnums.map { enum =>
-      val key = enumeratorMergeKey(enum)
-      generatedByKey.getOrElse(key, enum)
+    val mergedExisting = originalEnums.map { qualifier =>
+      val key = enumeratorMergeKey(qualifier)
+      generatedByKey.getOrElse(key, qualifier)
     }
     val replacedKeys = originalEnums.map(enumeratorMergeKey).toSet.intersect(generatedByKey.keySet)
-    val newGenerated = generatedEnums.filter { enum =>
-      val key = enumeratorMergeKey(enum)
-      !replacedKeys.contains(key)
+    val existingBindings = originalEnums.flatMap(enumeratorBindingKey).toSet
+    val newGenerated = generatedEnums.filter { qualifier =>
+      val key = enumeratorMergeKey(qualifier)
+      // A changed callee can be the user's implementation of a scaffold qualifier.
+      // Keep it rather than appending a second qualifier for the same binding.
+      !replacedKeys.contains(key) && !enumeratorBindingKey(qualifier).exists(existingBindings)
     }
     mergedExisting ++ newGenerated
   }
 
-  private def enumeratorMergeKey(enum: Enumerator): String = enum match {
+  private def enumeratorBindingKey(qualifier: Enumerator): Option[String] = qualifier match {
+    case Enumerator.Generator(pat, _) if pat.collect { case name: Pat.Var => name }.nonEmpty =>
+      Some(s"gen:${pat.structure}")
+    case Enumerator.Val(pat, _) if pat.collect { case name: Pat.Var => name }.nonEmpty =>
+      Some(s"val:${pat.structure}")
+    case _ => None
+  }
+
+  private def enumeratorMergeKey(qualifier: Enumerator): String = qualifier match {
     // Prefixes separate enumerator kinds to avoid key collisions across types.
     case Enumerator.Generator(pat, rhs) =>
       s"gen:${pat.structure}:${termShape(rhs)}"
