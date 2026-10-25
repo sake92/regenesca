@@ -11,7 +11,8 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
-    continue-on-error: true # just playing for now
+    outputs:
+      snapshot: ${{ steps.version.outputs.snapshot }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -28,7 +29,50 @@ jobs:
       - name: Install deder
         run: |
           brew install sake92/tap/deder
+      - name: Check versions
+        id: version
+        shell: bash
+        run: |
+          versions=$(deder exec -t version --json -l error)
+          echo "$versions"
+          version=$(jq -er '[.[]] | unique | if length == 1 then .[0] else error("Expected one version across all modules") end' <<< "$versions")
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-SNAPSHOT)?$ ]]; then
+            echo "Expected a semantic version"
+            exit 1
+          fi
+          if [[ "$version" == *-SNAPSHOT ]]; then
+            echo "snapshot=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "snapshot=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Compile
         run: deder exec -t compile
-      - name: Test Deder
+      - name: Test
         run: deder exec -t test
+
+  publish-snapshots:
+    name: publish snapshots
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.test.outputs.snapshot == 'true'
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      DEDER_PUBLISH_SNAPSHOT: ${{ needs.test.outputs.snapshot }}
+      DEDER_SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+      DEDER_SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: coursier/cache-action@v7
+        with:
+          extraFiles: deder.pkl
+      - uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@main
+      - name: Install deder
+        run: brew install sake92/tap/deder
+      - name: Publish snapshots
+        run: deder exec -t publish
