@@ -495,12 +495,16 @@ class SourceMerger(
     mergedExisting ++ newGenerated
   }
 
-  private def enumeratorBindingKey(qualifier: Enumerator): Option[String] = qualifier match {
-    case Enumerator.Generator(pat, _) if pat.collect { case name: Pat.Var => name }.nonEmpty =>
-      Some(s"gen:${pat.structure}")
-    case Enumerator.Val(pat, _) if pat.collect { case name: Pat.Var => name }.nonEmpty =>
-      Some(s"val:${pat.structure}")
-    case _ => None
+  private def enumeratorBindingKey(qualifier: Enumerator): Option[(String, List[String])] = {
+    val bindingPattern = qualifier match {
+      case Enumerator.Generator(pat, _) => Some("gen" -> pat)
+      case Enumerator.Val(pat, _) => Some("val" -> pat)
+      case _ => None
+    }
+    bindingPattern.flatMap { case (kind, pat) =>
+      val names = pat.collect { case name: Pat.Var => name.name.value }
+      Option.when(names.nonEmpty)(kind -> names)
+    }
   }
 
   private def enumeratorMergeKey(qualifier: Enumerator): String = qualifier match {

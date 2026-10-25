@@ -6,6 +6,32 @@ import scala.meta.dialects.Scala34
 class SourceMergerIncrementalSuite extends BaseSuite {
   val merger = SourceMerger()
 
+  test("preserve implemented typed bindings when generated annotations change") {
+    val original = source"""
+      def run = for {
+        user: User <- loadUser()
+        label: Label = customLabel(user)
+      } yield label
+    """
+    val generated = source"""
+      def run = for {
+        user: NewUser <- defaultUser()
+        label: NewLabel = defaultLabel(user)
+        saved <- save(user)
+      } yield label
+    """
+    val expected = source"""
+      def run = for {
+        user: User <- loadUser()
+        label: Label = customLabel(user)
+        saved <- save(user)
+      } yield label
+    """
+    val result = merger.merge(original, generated)
+    assertEqStructure(result, expected)
+    assertEqStructure(merger.merge(result.parse[Source].get, generated), expected)
+  }
+
   test("preserve implemented response qualifiers when regenerating http4s routes") {
     val original = source"""
       def routes = HttpRoutes.of[IO] {
