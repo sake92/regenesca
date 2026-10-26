@@ -16,8 +16,8 @@ object ForComprehensionPrinter {
     }
 
     val edits = parsed.collect {
-      case term: Term.For      => qualifierEdits(term.enumsBlock, term.pos.startColumn)
-      case term: Term.ForYield => qualifierEdits(term.enumsBlock, term.pos.startColumn)
+      case term: Term.For      => qualifierEdits(term)
+      case term: Term.ForYield => qualifierEdits(term)
     }.flatten
 
     edits.sortBy(_.start).reverse.foldLeft(printed) { (result, edit) =>
@@ -25,20 +25,30 @@ object ForComprehensionPrinter {
     }
   }
 
-  private def qualifierEdits(block: Term.EnumeratorsBlock, column: Int): List[Edit] = {
+  private def qualifierEdits(term: Term): List[Edit] = {
+    val (block, bodyStart) = term match {
+      case forTerm: Term.For      => forTerm.enumsBlock -> forTerm.body.pos.start
+      case forYield: Term.ForYield => forYield.enumsBlock -> forYield.body.pos.start
+      case _ => return Nil
+    }
     if (block.tokens.exists {
           case _: Token.Comment => true
           case _                => false
         }) return Nil
 
     val qualifiers = block.enums
-    val indentation = " " * column
+    val indentation = " " * term.pos.startColumn
     val qualifierIndentation = indentation + "  "
-    val opening = Edit(block.pos.start, qualifiers.head.pos.start, "{\n" + qualifierIndentation)
+    val opening = Edit(term.tokens.head.pos.end, qualifiers.head.pos.start, " {\n" + qualifierIndentation)
     val separators = qualifiers.sliding(2).collect { case List(left, right) =>
       Edit(left.pos.end, right.pos.start, "\n" + qualifierIndentation)
     }.toList
-    val closing = Edit(qualifiers.last.pos.end, block.pos.end, "\n" + indentation + "}")
+    val closingEnd = term match {
+      case _: Term.ForYield =>
+        term.tokens.filter(_.text == "yield").filter(_.pos.end <= bodyStart).last.pos.start
+      case _ => block.pos.end
+    }
+    val closing = Edit(qualifiers.last.pos.end, closingEnd, "\n" + indentation + "} ")
     opening :: separators ::: List(closing)
   }
 }

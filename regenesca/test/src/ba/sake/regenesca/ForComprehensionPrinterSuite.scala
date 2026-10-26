@@ -27,6 +27,26 @@ class ForComprehensionPrinterSuite extends BaseSuite {
     assertEquals(printed.count(_ == '{'), 2)
   }
 
+  test("turns Scala 3 newline for-yields into valid brace-style comprehensions") {
+    val tree = """def route =
+      |  for
+      |    reqBody <- req.as[Pet]
+      |    resp <- NotImplemented("TODO: return Pet")
+      |  yield resp""".stripMargin.parse[Source].get
+
+    val printed = ForComprehensionPrinter.syntax(tree)
+
+    assertEquals(
+      printed,
+      """def route =
+        |  for {
+        |    reqBody <- req.as[Pet]
+        |    resp <- NotImplemented("TODO: return Pet")
+        |  } yield resp""".stripMargin
+    )
+    assertEquals(printed.parse[Source].get.structure, tree.structure)
+  }
+
   test("delegates source without comprehensions to Scalameta") {
     val tree = "class Api { def answer = 42 }".parse[Source].get
 
