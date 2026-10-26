@@ -7,6 +7,35 @@ class SourceMergerForComprehensionsSuite extends BaseSuite {
 
   val sourceMerger = SourceMerger()
 
+  test("prints merged for-yield qualifiers on separate lines inside a def") {
+    val original = "def route = for (a <- sourceA(1)) yield a".parse[Source].get
+    val generated = "def route = for (a <- sourceA(2); b <- sourceB(a)) yield b".parse[Source].get
+
+    val once = sourceMerger.merge(original, generated)
+    val twice = sourceMerger.merge(once.parse[Source].get, generated)
+
+    val expected = """def route = for {
+                     |              a <- sourceA(2)
+                     |              b <- sourceB(a)
+                     |            } yield a""".stripMargin
+    assertEquals(once, expected)
+    assertEquals(twice, expected)
+  }
+
+  test("prints qualifiers on separate lines when merging into an empty source") {
+    val generated = "def route = for (a <- as; b <- bs(a)) yield b".parse[Source].get
+
+    val printed = sourceMerger.merge("".parse[Source].get, generated)
+
+    assertEquals(
+      printed,
+      """def route = for {
+        |              a <- as
+        |              b <- bs(a)
+        |            } yield b""".stripMargin
+    )
+  }
+
   test("should merge for-yield qualifiers and preserve user yield expression") {
     val original = source"""
       def route = {

@@ -23,14 +23,15 @@ class SourceMerger(
 
   def merge(originalSource: Source, overwriteSource: Source): String =
     if (originalSource.stats.isEmpty) {
-      overwriteSource.syntax
+      ForComprehensionPrinter.syntax(overwriteSource)
     } else {
       val origSourceLastToken = originalSource.tokens.last
       val patches =
         patchStats(origSourceLastToken, false, originalSource.stats, overwriteSource.stats)
       // println(s"GENERATED PATCHES: ${patches.mkString("\n")}")
       val ctx = scalafix.v0.RuleCtx(originalSource)
-      PatchInternals.tokenPatchApply(ctx, None, patches)
+      val merged = PatchInternals.tokenPatchApply(ctx, None, patches)
+      ForComprehensionPrinter.syntax(merged.parse[Source].get)
     }
 
   // TODO rename
