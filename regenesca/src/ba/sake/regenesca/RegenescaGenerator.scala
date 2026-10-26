@@ -14,7 +14,7 @@ class RegenescaGenerator(merger: SourceMerger)(implicit dialect: Dialect) {
         val regeneratedFileSource = merger.merge(fileSource, generatedFileSource.source)
         Files.writeString(filePath, regeneratedFileSource)
       } else {
-        Files.writeString(filePath, generatedFileSource.source.syntax)
+        Files.writeString(filePath, ForComprehensionPrinter.syntax(generatedFileSource.source))
       }
     }
 
